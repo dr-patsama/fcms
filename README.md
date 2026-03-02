@@ -16,7 +16,7 @@ Comprehensive clinic management platform for the Thai healthcare market.
 
 | # | Module | Status |
 |---|--------|--------|
-| 1 | EMR | ✅ Done |
+| 1 | EMR (Auth, RBAC, Patients, Visits, SOAP, ICD-10) | ✅ Done |
 | 2 | Lab Management (General / Embryology / Andrology) | ✅ Done |
 | 3 | Ultrasound (GE Voluson Swift / DICOM) | ⬜ Planned |
 | 4 | Pharmacy | ⬜ Planned |
