@@ -335,6 +335,22 @@ async def save_measurements(
             "position": "anteverted" | "retroverted" | "axial",
             "notes": "Normal myometrium"
         },
+        "uterine_morphology_3d": {
+            "scan_performed": true,
+            "eshre_esge_class": "U0",
+            "eshre_esge_subclass": null,
+            "cervix_class": "C0",
+            "vagina_class": "V0",
+            "external_contour": "normal" | "indentation_lt_50" | "indentation_gte_50",
+            "internal_indentation_pct": 20,
+            "fundal_wall_thickness_mm": 12,
+            "internal_indentation_mm": 2.4,
+            "interostial_line": "straight" | "curved",
+            "cavity_shape": "normal" | "T_shaped" | "infantilis" | "septum_partial" | "septum_complete",
+            "septum_length_mm": null,
+            "septum_reaches_cervix": false,
+            "notes": "Normal uterine morphology on 3D coronal view"
+        },
         "free_fluid": "none" | "minimal" | "moderate" | "significant",
         "adnexa_notes": "No adnexal masses",
         "impression": "Growing dominant follicle right ovary, adequate endometrium",
@@ -388,6 +404,7 @@ async def save_measurements(
 
         # Uterus
         "uterus": body.get("uterus"),
+        "uterine_morphology_3d": body.get("uterine_morphology_3d"),
         "free_fluid": body.get("free_fluid", "none"),
         "adnexa_notes": body.get("adnexa_notes"),
 
@@ -423,15 +440,117 @@ async def get_patient_measurements(
 
 
 # ═══════════════════════════════════════════════════════════
-# 4. REPORT TEMPLATES
+# 4. ESHRE/ESGE UTERINE ANOMALY CLASSIFICATION
+# ═══════════════════════════════════════════════════════════
+
+ESHRE_ESGE_CLASSIFICATION = {
+    "uterine": {
+        "U0": {
+            "name_en": "Normal uterus",
+            "name_th": "มดลูกปกติ",
+            "description": "Normal uterine anatomy. Interostial line straight or curved, internal indentation at fundal midline ≤50% of uterine wall thickness.",
+            "subclasses": {}
+        },
+        "U1": {
+            "name_en": "Dysmorphic uterus",
+            "name_th": "มดลูกผิดรูป",
+            "description": "Abnormal uterine shape but with normal external outline.",
+            "subclasses": {
+                "U1a": {"name": "T-shaped", "description": "Narrow cavity due to thickened lateral walls. Corpus:cervix ratio ≈ 2:1."},
+                "U1b": {"name": "Infantilis", "description": "Narrow cavity without lateral wall thickening. Inverse ratio: corpus 1/3, cervix 2/3."},
+                "U1c": {"name": "Others", "description": "All other minor cavity deformities not fitting U1a or U1b."},
+            }
+        },
+        "U2": {
+            "name_en": "Septate uterus",
+            "name_th": "มดลูกมีผนังกั้น",
+            "description": "Normal external contour (indentation <50% wall thickness) with internal septum (indentation >50% wall thickness).",
+            "subclasses": {
+                "U2a": {"name": "Partial septate", "description": "Septum partially divides cavity above level of internal cervical os."},
+                "U2b": {"name": "Complete septate", "description": "Septum divides cavity down to the level of internal cervical os."},
+            }
+        },
+        "U3": {
+            "name_en": "Bicorporeal uterus",
+            "name_th": "มดลูกสองตัว",
+            "description": "External fundal indentation >50% of uterine wall thickness.",
+            "subclasses": {
+                "U3a": {"name": "Partial bicorporeal", "description": "External division partially separates uterine bodies. Does not reach cervix."},
+                "U3b": {"name": "Complete bicorporeal", "description": "External division reaches level of cervix. 75% have longitudinal vaginal septum."},
+                "U3c": {"name": "Bicorporeal septate", "description": "External division + internal septum (>150% wall thickness at fundal midline)."},
+            }
+        },
+        "U4": {
+            "name_en": "Hemi-uterus (unicornuate)",
+            "name_th": "มดลูกครึ่งเดียว",
+            "description": "Unilateral formed uterus; contralateral part incompletely formed or absent.",
+            "subclasses": {
+                "U4a": {"name": "With rudimentary cavity", "description": "Rudimentary horn with functional cavity (communicating or non-communicating)."},
+                "U4b": {"name": "Without rudimentary cavity", "description": "Rudimentary horn without cavity, or no rudimentary horn."},
+            }
+        },
+        "U5": {
+            "name_en": "Aplastic uterus",
+            "name_th": "มดลูกไม่พัฒนา",
+            "description": "Absent or rudimentary uterine development (Mayer-Rokitansky-Küster-Hauser).",
+            "subclasses": {
+                "U5a": {"name": "With rudimentary cavity", "description": "Rudimentary uterine horn(s) with cavity."},
+                "U5b": {"name": "Without rudimentary cavity", "description": "Complete aplasia or rudimentary without cavity."},
+            }
+        },
+        "U6": {
+            "name_en": "Unclassified",
+            "name_th": "ยังไม่จำแนก",
+            "description": "Rare anomalies that do not fit into classes U0–U5.",
+            "subclasses": {}
+        },
+    },
+    "cervical": {
+        "C0": {"name_en": "Normal cervix", "name_th": "ปากมดลูกปกติ"},
+        "C1": {"name_en": "Septate cervix", "name_th": "ปากมดลูกมีผนังกั้น"},
+        "C2": {"name_en": "Double cervix", "name_th": "ปากมดลูกสองอัน"},
+        "C3": {"name_en": "Unilateral cervical aplasia", "name_th": "ปากมดลูกข้างเดียวไม่พัฒนา"},
+        "C4": {"name_en": "Cervical aplasia", "name_th": "ปากมดลูกไม่พัฒนา"},
+    },
+    "vaginal": {
+        "V0": {"name_en": "Normal vagina", "name_th": "ช่องคลอดปกติ"},
+        "V1": {"name_en": "Longitudinal non-obstructing septum", "name_th": "ผนังกั้นตามยาวไม่อุดตัน"},
+        "V2": {"name_en": "Longitudinal obstructing septum", "name_th": "ผนังกั้นตามยาวอุดตัน"},
+        "V3": {"name_en": "Transverse septum and/or imperforate hymen", "name_th": "ผนังกั้นตามขวาง"},
+        "V4": {"name_en": "Vaginal aplasia", "name_th": "ช่องคลอดไม่พัฒนา"},
+    },
+    "measurement_criteria": {
+        "internal_indentation": "Measured from interostial line to deepest point of fundal indentation",
+        "wall_thickness": "Measured from external contour to endometrial surface at thickest part of fundus",
+        "septum_vs_normal": "Internal indentation >50% of wall thickness → abnormal (U1–U2)",
+        "septate_vs_bicorporeal": "External indentation <50% → septate (U2); ≥50% → bicorporeal (U3)",
+        "imaging_method": "3D transvaginal ultrasound (3D TVUS) coronal view is recommended first-line",
+    }
+}
+
+
+@router.get("/eshre-esge-classification")
+async def get_eshre_esge_classification(
+    current_user: User = Depends(require_module_access("ultrasound")),
+):
+    """Return full ESHRE/ESGE uterine anomaly classification reference."""
+    return ESHRE_ESGE_CLASSIFICATION
+
+
+# ═══════════════════════════════════════════════════════════
+# 5. REPORT TEMPLATES
 # ═══════════════════════════════════════════════════════════
 
 REPORT_TEMPLATES = {
     "baseline": {
-        "name_en": "Baseline Scan",
-        "name_th": "สแกนพื้นฐาน",
-        "sections": ["uterus", "endometrium", "right_ovary", "left_ovary", "afc", "adnexa", "impression"],
-        "description": "Initial assessment before treatment cycle",
+        "name_en": "Baseline Scan + 3D TVUS Uterine Morphology",
+        "name_th": "สแกนพื้นฐาน + อัลตราซาวด์ 3 มิติประเมินรูปร่างมดลูก",
+        "sections": [
+            "uterus_2d", "uterine_morphology_3d", "eshre_esge_classification",
+            "endometrium", "right_ovary", "left_ovary", "afc", "adnexa", "impression"
+        ],
+        "description": "Initial assessment before treatment cycle. Includes 3D TVUS coronal view for congenital uterine anomaly screening using ESHRE/ESGE classification.",
+        "three_d_tvus": True,
     },
     "follicle_tracking": {
         "name_en": "Follicle Tracking",

@@ -97,6 +97,22 @@ def upgrade():
         sa.Column("uterus_ap_mm", sa.Numeric(5, 1)),
         sa.Column("uterus_position", sa.String(20)),
 
+        # 3D TVUS Uterine Morphology (ESHRE/ESGE Classification)
+        sa.Column("tvus_3d_performed", sa.Boolean, default=False),
+        sa.Column("eshre_esge_uterine_class", sa.String(5)),       # U0, U1, U2, U3, U4, U5, U6
+        sa.Column("eshre_esge_uterine_subclass", sa.String(5)),    # U1a, U2b, U3c, etc.
+        sa.Column("eshre_esge_cervix_class", sa.String(5)),         # C0–C4
+        sa.Column("eshre_esge_vagina_class", sa.String(5)),         # V0–V4
+        sa.Column("external_contour", sa.String(30)),               # normal, indentation_lt_50, indentation_gte_50
+        sa.Column("internal_indentation_pct", sa.Numeric(5, 1)),    # % of uterine wall thickness
+        sa.Column("internal_indentation_mm", sa.Numeric(5, 1)),
+        sa.Column("fundal_wall_thickness_mm", sa.Numeric(5, 1)),
+        sa.Column("interostial_line", sa.String(20)),               # straight, curved
+        sa.Column("cavity_shape_3d", sa.String(30)),                # normal, T_shaped, infantilis, septum_partial, septum_complete
+        sa.Column("septum_length_mm", sa.Numeric(5, 1)),
+        sa.Column("septum_reaches_cervix", sa.Boolean),
+        sa.Column("uterine_morphology_notes", sa.Text),
+
         # Other
         sa.Column("free_fluid", sa.String(20)),
         sa.Column("adnexa_notes", sa.Text),

@@ -176,6 +176,103 @@ export default function UltrasoundDashboard() {
           </div>
 
           {/* Impression & Plan */}
+          {/* 3D TVUS Uterine Morphology — ESHRE/ESGE (shown for baseline exam) */}
+          {examType === 'baseline' && (
+            <div style={{ background: '#FDF4FF', border: '1px solid #E9D5FF', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#7C3AED', marginBottom: '4px' }}>🔮 3D TVUS Uterine Morphology</h4>
+              <p style={{ fontSize: '10px', color: '#8B5CF6', marginBottom: '12px' }}>ESHRE/ESGE Classification · การจำแนกความผิดปกติแต่กำเนิดของมดลูก</p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                <div>
+                  <label style={label}>Uterine Class *</label>
+                  <select style={input} defaultValue="U0">
+                    <option value="U0">U0 — Normal</option>
+                    <option value="U1">U1 — Dysmorphic</option>
+                    <option value="U2">U2 — Septate</option>
+                    <option value="U3">U3 — Bicorporeal</option>
+                    <option value="U4">U4 — Hemi-uterus</option>
+                    <option value="U5">U5 — Aplastic</option>
+                    <option value="U6">U6 — Unclassified</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>Subclass</label>
+                  <select style={input} defaultValue="">
+                    <option value="">None</option>
+                    <option value="a">a — T-shaped / Partial</option>
+                    <option value="b">b — Infantilis / Complete</option>
+                    <option value="c">c — Others / Septate</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>Cervix</label>
+                  <select style={input} defaultValue="C0">
+                    <option value="C0">C0 — Normal</option>
+                    <option value="C1">C1 — Septate</option>
+                    <option value="C2">C2 — Double</option>
+                    <option value="C3">C3 — Unilateral aplasia</option>
+                    <option value="C4">C4 — Aplasia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                <div>
+                  <label style={label}>Vagina</label>
+                  <select style={input} defaultValue="V0">
+                    <option value="V0">V0 — Normal</option>
+                    <option value="V1">V1 — Non-obstructing septum</option>
+                    <option value="V2">V2 — Obstructing septum</option>
+                    <option value="V3">V3 — Transverse septum</option>
+                    <option value="V4">V4 — Aplasia</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>External Contour</label>
+                  <select style={input} defaultValue="normal">
+                    <option value="normal">Normal (smooth)</option>
+                    <option value="indentation_lt_50">Indentation &lt;50% UWT</option>
+                    <option value="indentation_gte_50">Indentation ≥50% UWT</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={label}>Interostial Line</label>
+                  <select style={input} defaultValue="straight">
+                    <option value="straight">Straight</option>
+                    <option value="curved">Curved / Convex</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                <div><label style={label}>Fundal wall (mm)</label><input style={input} type="number" step="0.1" placeholder="e.g. 12" /></div>
+                <div><label style={label}>Internal indent (mm)</label><input style={input} type="number" step="0.1" placeholder="e.g. 2.4" /></div>
+                <div><label style={label}>Indent % of UWT</label><input style={input} type="number" step="1" placeholder="e.g. 20" /></div>
+                <div><label style={label}>Septum length (mm)</label><input style={input} type="number" step="0.1" placeholder="if present" /></div>
+              </div>
+
+              <div style={{ marginBottom: '8px' }}>
+                <label style={label}>3D Morphology Notes</label>
+                <textarea style={{ ...input, height: '48px', resize: 'vertical' }} placeholder="Normal uterine morphology on 3D coronal view. No septum, no external indentation. Classification: U0/C0/V0" />
+              </div>
+
+              {/* Quick reference */}
+              <details style={{ marginTop: '8px' }}>
+                <summary style={{ fontSize: '10px', color: '#7C3AED', cursor: 'pointer', fontWeight: 600 }}>📖 ESHRE/ESGE Quick Reference</summary>
+                <div style={{ marginTop: '8px', padding: '10px', background: 'white', borderRadius: '6px', fontSize: '10px', color: C.g600, lineHeight: '1.6' }}>
+                  <div><strong>Key measurements (3D coronal view):</strong></div>
+                  <div>• Internal indentation: from interostial line to deepest fundal point</div>
+                  <div>• Wall thickness (UWT): external contour to endometrium at fundus</div>
+                  <div>• Septate (U2): internal indent &gt;50% UWT, external indent &lt;50% UWT</div>
+                  <div>• Bicorporeal (U3): external indent &gt;50% UWT</div>
+                  <div>• U3c (bicorporeal septate): fundal indent width &gt;150% UWT</div>
+                  <div style={{ marginTop: '4px' }}><strong>Classification format:</strong> U_/C_/V_ (e.g. U2a/C0/V0 = partial septate, normal cervix & vagina)</div>
+                </div>
+              </details>
+            </div>
+          )}
+
+          {/* Impression & Plan (original) */}
           <div style={{ marginBottom: '14px' }}>
             <label style={label}>Impression / ผลสรุป</label>
             <textarea style={{ ...input, height: '60px', resize: 'vertical' }} value={impression} onChange={e => setImpression(e.target.value)}
