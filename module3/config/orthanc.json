@@ -1,0 +1,54 @@
+{
+  "/**": "FCMS Orthanc Configuration for GE VOLUSON Swift Integration",
+  "/**/": "Place this file at /etc/orthanc/orthanc.json (Linux) or ~/orthanc/orthanc.json (macOS)",
+
+  "Name": "FCMS Orthanc",
+  "StorageDirectory": "/var/lib/orthanc/db",
+  "IndexDirectory": "/var/lib/orthanc/db",
+
+  "HttpPort": 8042,
+  "DicomPort": 4242,
+
+  "DicomAet": "FCMS_ORTHANC",
+  "DicomCheckCalledAet": false,
+  "DicomCheckModalityHost": false,
+
+  "RemoteAccessAllowed": true,
+  "AuthenticationEnabled": true,
+  "RegisteredUsers": {
+    "orthanc": "orthanc"
+  },
+
+  "DicomModalities": {
+    "VOLUSON_SWIFT": ["VOLUSON_SWIFT", "192.168.1.100", 4242]
+  },
+
+  "OrthancPeers": {},
+
+  "StableAge": 10,
+  "StorageCompression": false,
+  "MaximumStorageSize": 0,
+  "MaximumPatientCount": 0,
+
+  "LuaScripts": [],
+
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "Ssl": false,
+    "StudiesMetadata": "MainDicomTags",
+    "SeriesMetadata": "Full"
+  },
+
+  "/*notes*/": [
+    "1. Change VOLUSON_SWIFT IP address (192.168.1.100) to your actual VOLUSON Swift LAN IP",
+    "2. Change RegisteredUsers password for production use",
+    "3. StorageDirectory should have sufficient disk space for DICOM images",
+    "4. Install Orthanc: brew install orthanc (macOS) or apt install orthanc (Ubuntu)",
+    "5. Install DICOMweb plugin: apt install orthanc-dicomweb (Ubuntu)",
+    "6. Start: orthanc /etc/orthanc/orthanc.json",
+    "7. Verify: curl http://localhost:8042/system -u orthanc:orthanc"
+  ]
+}
