@@ -350,35 +350,3 @@ async def add_diagnosis(
     db.refresh(dx)
     return dx
 
-
-# ═══════════════════════════════════════════════════════════
-# MAIN APP
-# ═══════════════════════════════════════════════════════════
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="FCMS - Fertility Clinic Management System",
-        version="2.0.0",
-        description="Comprehensive fertility clinic management platform",
-    )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:8000"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    app.include_router(auth_router)
-    app.include_router(patient_router)
-    app.include_router(visit_router)
-
-    @app.get("/health")
-    def health():
-        return {"status": "ok", "version": "2.0.0"}
-
-    return app
-
-app = create_app()

@@ -88,7 +88,7 @@ class Patient(Base):
 
     visits            = relationship("Visit", back_populates="patient")
     medical_history   = relationship("MedicalHistory", back_populates="patient", uselist=False)
-    fertility_history = relationship("FertilityHistory", back_populates="patient", uselist=False)
+    fertility_history = relationship("FertilityHistory", back_populates="patient", uselist=False, foreign_keys="[FertilityHistory.patient_id]")
     consents          = relationship("ConsentForm", back_populates="patient")
 
     __table_args__ = (
