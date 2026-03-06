@@ -3,7 +3,7 @@ FCMS Module 2 - Lab Management API Routes
 All endpoints for General Lab, Embryology, Andrology + Imports
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -331,3 +331,75 @@ async def download_import_template(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# LAB TUBE LABELS — 40×20mm / ฉลากหลอดเลือด 40×20 มม.
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/labels/tube")
+async def generate_tube_label(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_module_access("lab"))
+):
+    """
+    Generate lab tube label data (40×20mm). / สร้างข้อมูลฉลากหลอดตัวอย่าง (40×20 มม.)
+    Compact format for blood/urine collection tubes.
+    """
+    body = await request.json()
+    from datetime import datetime
+    now = datetime.now()
+
+    label = {
+        "id": str(uuid.uuid4()),
+        "label_format": "40x20mm",
+        "patient_hn": body.get("patient_hn", ""),
+        "patient_name_en": body.get("patient_name_en", ""),
+        "patient_name_th": body.get("patient_name_th", ""),
+        "sample_barcode": body.get("barcode", ""),
+        "test_code": body.get("test_code", ""),
+        "test_name_en": body.get("test_name_en", ""),
+        "test_name_th": body.get("test_name_th", ""),
+        "container": body.get("container", ""),  # EDTA, Plain, SST, etc.
+        "collected_date": body.get("collected_date", now.strftime("%d/%m/%Y")),
+        "collected_time": body.get("collected_time", now.strftime("%H:%M")),
+        "collected_date_th": now.strftime("%d/%m/") + str(now.year + 543),
+    }
+    return label
+
+
+@router.post("/labels/tube/batch")
+async def generate_tube_labels_batch(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_module_access("lab"))
+):
+    """
+    Generate all tube labels for a lab order. / สร้างฉลากหลอดทั้งหมดของใบสั่ง lab
+    One label per tube/container.
+    """
+    body = await request.json()
+    from datetime import datetime
+    now = datetime.now()
+    labels = []
+
+    for idx, tube in enumerate(body.get("tubes", [])):
+        labels.append({
+            "id": str(uuid.uuid4()),
+            "label_format": "40x20mm",
+            "patient_hn": body.get("patient_hn", ""),
+            "patient_name_en": body.get("patient_name_en", ""),
+            "patient_name_th": body.get("patient_name_th", ""),
+            "sample_barcode": tube.get("barcode", ""),
+            "test_code": tube.get("test_code", ""),
+            "test_name_en": tube.get("test_name_en", ""),
+            "test_name_th": tube.get("test_name_th", ""),
+            "container": tube.get("container", ""),
+            "collected_date": now.strftime("%d/%m/%Y"),
+            "collected_time": now.strftime("%H:%M"),
+            "collected_date_th": now.strftime("%d/%m/") + str(now.year + 543),
+        })
+
+    return {"order_id": body.get("order_id"), "labels": labels, "total_labels": len(labels)}
+

@@ -733,13 +733,13 @@ async def generate_label(
     current_user: User = Depends(require_module_access("pharmacy")),
     db: Session = Depends(get_db),
 ):
-    """Generate bilingual label data. / สร้างข้อมูลฉลากยาสองภาษา (70×35mm)"""
+    """Generate bilingual medication label data. / สร้างข้อมูลฉลากยาสองภาษา (80×50mm)"""
     body = await request.json()
     now = datetime.now()
 
     label = {
         "id": str(uuid.uuid4()),
-        "label_format": "70x35mm",
+        "label_format": "80x50mm",
         "clinic_name_en": "Life by Dr. Pat",
         "clinic_name_th": "คลินิก ไลฟ์ บาย ดร.แพท",
         "clinic_phone": body.get("clinic_phone", "02-XXX-XXXX"),

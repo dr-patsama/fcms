@@ -399,12 +399,12 @@ function LabelPreviewTab() {
         Label Preview / ดูตัวอย่างฉลากยา
       </div>
       <div style={{ fontSize: 12, color: C.gray500, marginBottom: 20 }}>
-        Standard 70mm × 35mm pharmacy label with bilingual content / ฉลากยามาตรฐาน 70×35 มม. สองภาษา
+        Standard 80mm × 50mm pharmacy label with bilingual content / ฉลากยามาตรฐาน 80×50 มม. สองภาษา
       </div>
 
-      {/* Label card — simulates 70×35mm at 2× scale */}
+      {/* Label card — simulates 80×50mm at ~2× scale */}
       <div style={{
-        width: 530, minHeight: 264, border: `2px solid ${C.gray200}`,
+        width: 604, minHeight: 378, border: `2px solid ${C.gray200}`,
         borderRadius: 6, padding: 14, background: C.white,
         fontFamily: "'Cloud', 'Noto Sans Thai', sans-serif",
         boxShadow: '0 4px 12px rgba(0,0,0,0.08)',

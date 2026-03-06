@@ -10,14 +10,14 @@ workflow, bilingual medication label printing, and expiry/low-stock alerts.
 - **Drug Catalogue / รายการยา**: Generic + brand names (EN/TH), category, form, strength, supplier, pricing
 - **Stock Management / จัดการสต็อก**: Receive stock with lot/expiry tracking, manual adjustments with mandatory reason, FIFO dispensing
 - **Prescription Workflow / ใบสั่งยา**: EMR → Pharmacist verify → Dispense → Record (full audit trail)
-- **Label Printing / ฉลากยา**: Bilingual medication labels (70×35mm) with patient name TH/EN, drug, dose, frequency, instructions, clinic info, Buddhist year date
+- **Label Printing / ฉลากยา**: Bilingual medication labels (80×50mm) with patient name TH/EN, drug, dose, frequency, instructions, clinic info, Buddhist year date
 - **Expiry Alerts / แจ้งเตือนหมดอายุ**: Configurable 30/60/90 day warnings with value-at-risk calculation
 - **Low-Stock Alerts / แจ้งเตือนสต็อกต่ำ**: Suggested reorder quantities based on reorder level
 - **Dispensing Log / บันทึกการจ่ายยา**: Full audit with pharmacist ID, timestamp, lot number
 - **i18n System / ระบบสองภาษา**: Shared translation dictionary for all modules
 
 ## Label Format / รูปแบบฉลากยา
-Standard 70mm × 35mm pharmacy label:
+Standard 80mm × 50mm pharmacy label:
 - Clinic name (EN/TH): Life by Dr. Pat / คลินิก ไลฟ์ บาย ดร.แพท
 - Patient name (EN/TH) + HN number
 - Drug name (EN/TH) + strength + form
