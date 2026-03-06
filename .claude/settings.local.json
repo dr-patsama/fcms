@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pg_isready:*)",
+      "Bash(python3:*)",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(.venv/bin/alembic history:*)",
+      "Bash(.venv/bin/alembic:*)",
+      "Bash(.venv/bin/alembic show:*)"
+    ]
+  }
+}

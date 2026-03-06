@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSON
 
 revision = "m4_001"
-down_revision = "m3_001_ultrasound"
+down_revision = "m3_001"
 branch_labels = None
 depends_on = None
 

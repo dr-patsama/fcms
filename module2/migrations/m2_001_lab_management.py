@@ -8,7 +8,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "m2_001_lab_management"
-down_revision = None  # Link to Module 1's last migration
+down_revision = "m1_002_patient_demographics_v2"
 branch_labels = None
 depends_on = None
 

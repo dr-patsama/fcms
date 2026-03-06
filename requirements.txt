@@ -1,0 +1,36 @@
+# FCMS — Fertility Clinic Management System
+# Python 3.12+
+
+# ── Web framework ─────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# ── Database ──────────────────────────────────────────────
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# ── Validation ────────────────────────────────────────────
+pydantic[email]==2.10.3
+pydantic-settings==2.6.1
+
+# ── Auth ──────────────────────────────────────────────────
+PyJWT==2.10.1
+bcrypt==4.2.1
+pyotp==2.9.0
+
+# ── HTTP / Integrations ───────────────────────────────────
+httpx==0.28.1          # Orthanc PACS REST API (module 3)
+python-multipart==0.0.18  # File upload support
+
+# ── Data import (module 2) ────────────────────────────────
+openpyxl==3.1.5        # .xlsx read/write
+pandas==2.2.3          # CSV/TSV parsing
+
+# ── Label printing (module 4) ────────────────────────────
+reportlab==4.2.5       # PDF generation for pharmacy labels
+python-barcode==0.15.1 # Barcode generation
+Pillow==11.0.0         # Image rendering for barcodes
+
+# ── Cache / sessions ──────────────────────────────────────
+redis==5.2.1           # Session blacklisting + rate limiting
