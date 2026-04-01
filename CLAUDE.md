@@ -50,6 +50,7 @@ fcms/
 ├── module2/                # Lab: General / Embryology / Andrology
 ├── module3/                # Ultrasound: DICOM + GE VOLUSON Swift integration
 ├── module4/                # Pharmacy: Stock, Prescriptions, Dispensing, Labels
+├── module5/                # Medical Supply: Catalogue, Stock, Requisitions, Usage
 └── seed_admin.py           # One-time admin seeding script
 ```
 
@@ -87,6 +88,7 @@ moduleN/
 - Module 2: 19 tables (lab orders, embryos, andrology)
 - Module 3: 5 tables (DICOM studies, measurements, reports)
 - Module 4: pharmacy tables with FIFO stock lots
+- Module 5: 7 tables (suppliers, medical_supplies, supply_stock_lots, supply_transactions, supply_requisitions, requisition_items, supply_usage_logs)
 - `DATABASE_URL` default: `postgresql://fcms_user:fcms_pass@localhost:5432/fcms_db`
 
 ### Auth & RBAC
@@ -135,4 +137,5 @@ Label printing: Pharmacy labels are **80×50mm**; lab tube labels are **40×20mm
 | 2 — Lab (General / Embryology / Andrology) | ✅ Done |
 | 3 — Ultrasound (GE VOLUSON Swift / DICOM) | ✅ Done |
 | 4 — Pharmacy | ✅ Done |
-| 5–12 — Medical Supplies, CRM, Accounting, OR, etc. | ⬜ Planned |
+| 5 — Medical Supply (Catalogue, Requisitions, Usage) | ✅ Done |
+| 6–12 — CRM, Accounting, Social Media, OR, etc. | ⬜ Planned |
