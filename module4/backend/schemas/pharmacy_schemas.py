@@ -183,6 +183,34 @@ class PrescriptionVerifyRequest(BaseModel):
     items_approved: Optional[List[str]] = None  # specific item IDs, or all
 
 
+# ── Prescription Generator / เครื่องมือสร้างใบสั่งยา ─────────
+
+class RxGenItem(BaseModel):
+    """Structured medication line — quantity is computed server-side
+    (dose × times/day × days, rounded UP to the drug's pack_size)."""
+    drug_id: str
+    dose_per_time: float = Field(..., gt=0)      # e.g. 2 tablets per dose
+    times_per_day: int = Field(..., gt=0)        # e.g. 2 (bid)
+    duration_days: int = Field(..., gt=0)        # e.g. 14
+    route: Optional[str] = None                  # oral | vaginal | sublingual | subcutaneous | intramuscular | topical
+    instruction_en: Optional[str] = None         # e.g. "after meals"
+    instruction_th: Optional[str] = None         # e.g. "หลังอาหาร"
+    sig_en_override: Optional[str] = None        # free-text override of the auto sig
+    sig_th_override: Optional[str] = None
+    quantity_override: Optional[int] = Field(None, gt=0)  # manual final quantity
+
+
+class RxGenerateRequest(BaseModel):
+    patient_id: str
+    visit_id: Optional[str] = None
+    diagnosis_en: Optional[str] = None
+    diagnosis_th: Optional[str] = None
+    notes: Optional[str] = None                  # printed note, e.g. continue until 12 weeks
+    notes_th: Optional[str] = None
+    priority: str = "normal"
+    items: List[RxGenItem]
+
+
 class DispenseItemRequest(BaseModel):
     drug_id: str
     lot_id: Optional[str] = None  # auto-FIFO if not specified

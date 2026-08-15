@@ -44,6 +44,7 @@ class Drug(Base):
     supplier              = Column(String(200))
     reorder_level         = Column(Integer, default=50)
     reorder_quantity      = Column(Integer, default=200)
+    pack_size             = Column(Integer)  # units per box/pack — drives Rx quantity round-up / จำนวนต่อกล่อง ใช้ปัดจำนวนจ่ายขึ้นเต็มกล่อง
     unit_cost             = Column(Numeric(10, 2))
     selling_price         = Column(Numeric(10, 2))
     storage_condition     = Column(String(100))
@@ -140,6 +141,8 @@ class Prescription(Base):
     status         = Column(String(20), default="pending", index=True)
     # pending | verified | dispensed | partially_dispensed | cancelled
     priority       = Column(String(10), default="normal")  # normal | urgent | stat
+    diagnosis_en   = Column(Text)  # printed on the prescription document / วินิจฉัยบนใบสั่งยา
+    diagnosis_th   = Column(Text)
     notes          = Column(Text)
     notes_th       = Column(Text)
     verified_by    = Column(UUID, ForeignKey("users.id"))
@@ -161,7 +164,12 @@ class PrescriptionItem(Base):
     id               = Column(UUID, primary_key=True, default=gen_uuid)
     prescription_id  = Column(UUID, ForeignKey("prescriptions.id"), nullable=False)
     drug_id          = Column(UUID, ForeignKey("drugs.id"), nullable=False)
-    quantity         = Column(Integer, nullable=False)
+    quantity         = Column(Integer, nullable=False)   # final quantity to dispense (rounded up to full packs)
+    quantity_needed  = Column(Integer)                    # exact clinical need = dose × times/day × days
+    dose_per_time    = Column(Numeric(6, 2))              # e.g. 2 (tablets per dose)
+    times_per_day    = Column(Integer)                    # e.g. 2 (bid)
+    sig_en           = Column(Text)                       # full directions, e.g. "Take 2 tablets orally twice daily after meals"
+    sig_th           = Column(Text)                       # e.g. "รับประทานครั้งละ 2 เม็ด วันละ 2 ครั้ง หลังอาหาร"
     dosage           = Column(String(100))  # e.g. "200mg"
     frequency        = Column(String(100))  # e.g. "Twice daily"
     frequency_th     = Column(String(100))  # e.g. "วันละ 2 ครั้ง"

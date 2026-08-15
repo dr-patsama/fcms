@@ -34,3 +34,6 @@ Pillow==11.0.0         # Image rendering for barcodes
 
 # ── Cache / sessions ──────────────────────────────────────
 redis==5.2.1           # Session blacklisting + rate limiting
+
+# ── HEIC image support (module 4 Rx extraction) ──────────
+pillow-heif==0.21.0    # Convert iPhone HEIC photos for document extraction

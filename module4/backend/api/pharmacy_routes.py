@@ -900,6 +900,358 @@ async def consumption_report(
     }
 
 
+# ══════════════════════════════════════════════════════════
+# 7. PRESCRIPTION GENERATOR / เครื่องมือสร้างใบสั่งยา
+#    Structured sig → quantity computed and rounded UP to full
+#    packs (drugs.pack_size). Printable A4 document payload.
+#    Optional AI extraction from an uploaded photo/PDF (HEIC ok).
+# ══════════════════════════════════════════════════════════
+
+CLINIC_INFO = {
+    "name": "LIFE by Dr. Pat",
+    "name_th": "คลินิก ไลฟ์ บาย ดร.แพท",
+    "address": "Room 114/2 GPF Witthayu Towers, Wireless Rd, Lumpini, Pathumwan, Bangkok 10330 Thailand",
+    "hospital_license": "10102004165",
+    "tel": "083-432-4664",
+    "tagline_en": "Reproductive Medicine & Fertility Care",
+    "tagline_th": "เวชศาสตร์การเจริญพันธุ์และการดูแลภาวะมีบุตรยาก",
+}
+
+ROUTE_SIG = {
+    "oral":          {"verb_en": "Take",   "adverb_en": "orally",           "verb_th": "รับประทาน"},
+    "vaginal":       {"verb_en": "Insert", "adverb_en": "vaginally",        "verb_th": "เหน็บช่องคลอด"},
+    "sublingual":    {"verb_en": "Place",  "adverb_en": "under the tongue", "verb_th": "อมใต้ลิ้น"},
+    "subcutaneous":  {"verb_en": "Inject", "adverb_en": "subcutaneously",   "verb_th": "ฉีดใต้ผิวหนัง"},
+    "intramuscular": {"verb_en": "Inject", "adverb_en": "intramuscularly",  "verb_th": "ฉีดเข้ากล้ามเนื้อ"},
+    "topical":       {"verb_en": "Apply",  "adverb_en": "topically",        "verb_th": "ทาภายนอก"},
+}
+
+_THAI_MONTHS = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+
+
+def _fmt_dose(x) -> str:
+    f = float(x)
+    return str(int(f)) if f.is_integer() else f"{f:g}"
+
+
+def _freq_word_en(n: int) -> str:
+    return {1: "once daily", 2: "twice daily", 3: "three times daily",
+            4: "four times daily"}.get(n, f"{n} times daily")
+
+
+def _build_sig_en(dose, times, unit: str, route: str, instruction: str = None) -> str:
+    r = ROUTE_SIG.get(route or "oral", ROUTE_SIG["oral"])
+    u = unit or "unit"
+    d = float(dose)
+    if d != 1 and not u.endswith("s"):
+        u += "s"
+    elif d == 1 and u.endswith("s"):
+        u = u[:-1]
+    sig = f"{r['verb_en']} {_fmt_dose(dose)} {u} {r['adverb_en']} {_freq_word_en(times)}"
+    return f"{sig} {instruction}" if instruction else sig
+
+
+def _build_sig_th(dose, times, unit_th: str, route: str, instruction_th: str = None) -> str:
+    r = ROUTE_SIG.get(route or "oral", ROUTE_SIG["oral"])
+    u = unit_th or "หน่วย"
+    sig = f"{r['verb_th']}ครั้งละ {_fmt_dose(dose)} {u} วันละ {times} ครั้ง"
+    return f"{sig} {instruction_th}" if instruction_th else sig
+
+
+def _round_to_pack(needed: int, pack_size) -> int:
+    """Round quantity UP to full packs. / ปัดจำนวนขึ้นเต็มกล่อง"""
+    if not pack_size or int(pack_size) <= 0:
+        return needed
+    p = int(pack_size)
+    return ((needed + p - 1) // p) * p
+
+
+def _age_ymd(dob) -> dict:
+    """Age as years/months/days, bilingual. / อายุ ปี-เดือน-วัน"""
+    if not dob:
+        return {"en": None, "th": None}
+    today = date.today()
+    y = today.year - dob.year
+    m = today.month - dob.month
+    d = today.day - dob.day
+    if d < 0:
+        m -= 1
+        prev_month_end = date(today.year, today.month, 1) - timedelta(days=1)
+        d += prev_month_end.day
+    if m < 0:
+        y -= 1
+        m += 12
+    return {
+        "en": f"{y} years {m} months {d} days",
+        "th": f"{y} ปี {m} เดือน {d} วัน",
+    }
+
+
+def _drug_display_name(drug) -> str:
+    parts = [drug.brand_name or drug.generic_name, drug.strength]
+    form = (drug.form or "").replace("_", " ")
+    if form:
+        parts.append(form + ("s" if not form.endswith("s") else ""))
+    return " ".join(p for p in parts if p)
+
+
+@router.post("/prescriptions/generate")
+async def generate_prescription(
+    request: Request,
+    current_user: User = Depends(require_roles(["physician", "admin"])),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a prescription from structured sig lines.
+    Quantity per item = dose × times/day × days, rounded UP to the
+    drug's pack size — the round-up is internal and only the final
+    quantity appears on the printed document.
+    / สร้างใบสั่งยาจากวิธีใช้แบบมีโครงสร้าง ปัดจำนวนขึ้นเต็มกล่องอัตโนมัติ
+    """
+    from ..models.pharmacy_models import Prescription, PrescriptionItem, Drug
+    from ..schemas.pharmacy_schemas import RxGenerateRequest
+
+    body = RxGenerateRequest(**(await request.json()))
+
+    rx = Prescription(
+        id=str(uuid.uuid4()),
+        rx_number=_next_rx_number(db),
+        patient_id=body.patient_id,
+        visit_id=body.visit_id,
+        prescriber_id=current_user.id,
+        priority=body.priority,
+        diagnosis_en=body.diagnosis_en,
+        diagnosis_th=body.diagnosis_th,
+        notes=body.notes,
+        notes_th=body.notes_th,
+        status="pending",
+    )
+    db.add(rx)
+
+    for it in body.items:
+        drug = db.query(Drug).filter(Drug.id == it.drug_id).first()
+        if not drug:
+            raise HTTPException(404, f"Drug not found / ไม่พบยา: {it.drug_id}")
+
+        needed = int(-(-float(it.dose_per_time) * it.times_per_day * it.duration_days // 1))
+        quantity = it.quantity_override or _round_to_pack(needed, drug.pack_size)
+        sig_en = it.sig_en_override or _build_sig_en(
+            it.dose_per_time, it.times_per_day, drug.unit, it.route, it.instruction_en)
+        sig_th = it.sig_th_override or _build_sig_th(
+            it.dose_per_time, it.times_per_day, drug.unit_th, it.route, it.instruction_th)
+
+        db.add(PrescriptionItem(
+            id=str(uuid.uuid4()),
+            prescription_id=rx.id,
+            drug_id=drug.id,
+            quantity=quantity,
+            quantity_needed=needed,
+            dose_per_time=it.dose_per_time,
+            times_per_day=it.times_per_day,
+            duration_days=it.duration_days,
+            route=it.route,
+            route_th=ROUTE_SIG.get(it.route or "oral", {}).get("verb_th"),
+            sig_en=sig_en,
+            sig_th=sig_th,
+            instructions_en=it.instruction_en,
+            instructions_th=it.instruction_th,
+        ))
+
+    _audit(db, current_user, "CREATE", "prescription", rx.id,
+           f"Rx {rx.rx_number} (generator): {len(body.items)} items", request)
+    db.commit()
+
+    return {
+        "id": rx.id, "rx_number": rx.rx_number, "status": "pending",
+        "item_count": len(body.items),
+        "message": f"Prescription created / สร้างใบสั่งยา {rx.rx_number} สำเร็จ",
+    }
+
+
+@router.get("/prescriptions/{rx_id}/document")
+async def get_prescription_document(
+    rx_id: str,
+    current_user: User = Depends(require_module_access("pharmacy")),
+    db: Session = Depends(get_db),
+):
+    """Printable A4 prescription payload with clinic letterhead data,
+    patient demographics, bilingual sig lines, and final quantities.
+    / ข้อมูลสำหรับพิมพ์ใบสั่งยา A4 พร้อมหัวกระดาษคลินิก"""
+    from ..models.pharmacy_models import Prescription, Drug
+    from ...module1.backend.models.emr_models import Patient
+
+    rx = db.query(Prescription).filter(Prescription.id == rx_id).first()
+    if not rx:
+        raise HTTPException(404, "Prescription not found / ไม่พบใบสั่งยา")
+
+    patient = db.query(Patient).filter(Patient.id == rx.patient_id).first()
+    prescriber = db.query(User).filter(User.id == rx.prescriber_id).first()
+
+    created = rx.created_at or datetime.now(timezone.utc)
+    date_en = created.strftime("%-d %B %Y")
+    date_th = f"{created.day} {_THAI_MONTHS[created.month - 1]} {created.year + 543}"
+
+    age = _age_ymd(patient.date_of_birth if patient else None)
+
+    items = []
+    for i, item in enumerate(rx.items, 1):
+        drug = db.query(Drug).filter(Drug.id == item.drug_id).first()
+        items.append({
+            "no": i,
+            "name_en": _drug_display_name(drug) if drug else "",
+            "generic": drug.generic_name if drug else None,
+            "sig_en": item.sig_en or "",
+            "sig_th": item.sig_th or "",
+            "quantity": item.quantity,
+            "unit_en": (drug.unit + ("s" if item.quantity != 1 and not drug.unit.endswith("s") else "")) if drug and drug.unit else "",
+            "unit_th": drug.unit_th if drug else "",
+        })
+
+    return {
+        "clinic": CLINIC_INFO,
+        "rx_number": rx.rx_number,
+        "date_en": date_en,
+        "date_th": date_th,
+        "patient": {
+            "hn": patient.hn_number if patient else None,
+            "name_en": " ".join(p for p in [patient.prefix_en, patient.first_name_en, patient.last_name_en] if p) if patient else None,
+            "name_th": " ".join(p for p in [patient.prefix_th, patient.first_name_th, patient.last_name_th] if p) if patient and patient.first_name_th else None,
+            "age_en": age["en"],
+            "age_th": age["th"],
+            "id_number": patient.id_number if patient else None,
+        },
+        "diagnosis_en": rx.diagnosis_en,
+        "diagnosis_th": rx.diagnosis_th,
+        "items": items,
+        "notes": rx.notes,
+        "notes_th": rx.notes_th,
+        "prescriber": {
+            "name": " ".join(p for p in [prescriber.first_name_en, prescriber.last_name_en] if p) if prescriber else None,
+            "license_number": prescriber.license_number if prescriber else None,
+        },
+    }
+
+
+@router.post("/prescriptions/extract")
+async def extract_prescription_from_document(
+    request: Request,
+    current_user: User = Depends(require_roles(["physician", "admin"])),
+    db: Session = Depends(get_db),
+):
+    """
+    Extract patient + medication data from an uploaded photo or PDF
+    (medical certificate, previous prescription, clinical note) to
+    prefill the prescription writer. Accepts JPEG/PNG/WebP/HEIC/PDF —
+    HEIC (iPhone) photos are converted server-side. Requires
+    ANTHROPIC_API_KEY to be configured; returns 503 otherwise.
+    / ดึงข้อมูลผู้ป่วยและยาจากรูปถ่ายหรือ PDF (รองรับ HEIC จาก iPhone)
+    """
+    import os
+    import base64 as b64mod
+    import io
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Document extraction is not configured on this server (ANTHROPIC_API_KEY missing) / ยังไม่ได้ตั้งค่าการดึงข้อมูลจากเอกสาร")
+
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None:
+        raise HTTPException(400, "file is required / ต้องแนบไฟล์")
+
+    raw = await upload.read()
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 25 MB) / ไฟล์ใหญ่เกินไป")
+
+    content_type = (upload.content_type or "").lower()
+    filename = (upload.filename or "").lower()
+
+    if content_type == "application/pdf" or filename.endswith(".pdf"):
+        block = {"type": "document",
+                 "source": {"type": "base64", "media_type": "application/pdf",
+                            "data": b64mod.b64encode(raw).decode()}}
+    else:
+        # Normalise every image (incl. HEIC/HEIF) to a reasonably-sized JPEG
+        from PIL import Image
+        if content_type in ("image/heic", "image/heif") or filename.endswith((".heic", ".heif")):
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        try:
+            img = Image.open(io.BytesIO(raw))
+            img = img.convert("RGB")
+        except Exception:
+            raise HTTPException(415, "Unsupported image format / รูปแบบไฟล์ไม่รองรับ")
+        img.thumbnail((2000, 2000))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        block = {"type": "image",
+                 "source": {"type": "base64", "media_type": "image/jpeg",
+                            "data": b64mod.b64encode(buf.getvalue()).decode()}}
+
+    prompt = (
+        'Extract data from this medical document (certificate, prescription, or clinical note) '
+        'to prefill a prescription form. Respond ONLY with valid JSON, no markdown fences. Schema: '
+        '{"patient_name": string|null, "hn": string|null, "age": string|null, '
+        '"id_or_passport": string|null, "diagnosis": string|null, '
+        '"medications": [{"name": string, "strength": string|null, '
+        '"dose_per_time": number, "times_per_day": number, '
+        '"route": "oral"|"vaginal"|"sublingual"|"subcutaneous"|"intramuscular"|"topical", '
+        '"instruction": string|null, "duration_days": number|null}]}. '
+        'Interpret abbreviations: bid=2 times daily, tid=3, qid=4, od/qd=1, '
+        'pc="after meals", ac="before meals".'
+    )
+
+    import httpx
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": "claude-sonnet-4-6", "max_tokens": 1500,
+                  "messages": [{"role": "user",
+                                "content": [block, {"type": "text", "text": prompt}]}]},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(502, f"Extraction service error / บริการดึงข้อมูลขัดข้อง ({resp.status_code})")
+
+    text = "".join(b.get("text", "") for b in resp.json().get("content", []) if b.get("type") == "text")
+    try:
+        extracted = json.loads(text.replace("```json", "").replace("```", "").strip())
+    except json.JSONDecodeError:
+        raise HTTPException(502, "Could not parse extraction result / ไม่สามารถอ่านผลการดึงข้อมูล")
+
+    # Match extracted medications against the drug catalogue
+    from ..models.pharmacy_models import Drug
+    for med in extracted.get("medications", []):
+        token = (med.get("name") or "").split(" ")[0]
+        if not token:
+            continue
+        q = db.query(Drug).filter(Drug.is_active == True).filter(or_(
+            Drug.brand_name.ilike(f"%{token}%"),
+            Drug.generic_name.ilike(f"%{token}%"),
+        ))
+        strength_digits = "".join(c for c in (med.get("strength") or med.get("name") or "") if c.isdigit())
+        match = None
+        for candidate in q.limit(10).all():
+            cand_digits = "".join(c for c in (candidate.strength or "") if c.isdigit())
+            if not strength_digits or not cand_digits or strength_digits == cand_digits:
+                match = candidate
+                break
+        if match:
+            med["drug_id"] = match.id
+            med["catalogue_name"] = _drug_display_name(match)
+            med["pack_size"] = match.pack_size
+            med["unit"] = match.unit
+            med["unit_th"] = match.unit_th
+
+    _audit(db, current_user, "EXTRACT", "prescription_document", None,
+           f"Extracted {len(extracted.get('medications', []))} medications from upload", request)
+    db.commit()
+
+    return extracted
+
+
 # ── Translation endpoint for frontend i18n ────────────────
 @router.get("/translations")
 async def get_pharmacy_translations():

@@ -70,3 +70,25 @@ module4/
 └── migrations/
     └── m4_001_pharmacy.py          # DB migration (v2 + TH fields)
 ```
+
+## Prescription Generator / เครื่องมือสร้างใบสั่งยา (m4_002)
+
+Writes prescriptions from structured sig lines and prints a branded A4
+document with signature space.
+
+- **Quantity round-up**: quantity = dose × times/day × days, rounded UP to
+  full packs via `drugs.pack_size`. The calculation is internal — only the
+  final quantity appears on the printed document.
+- **Endpoints**: `POST /prescriptions/generate`,
+  `GET /prescriptions/{id}/document`, `POST /prescriptions/extract`
+- **Document extraction**: upload a photo or PDF of a certificate / previous
+  prescription to prefill the writer. Accepts JPEG, PNG, WebP, **HEIC/HEIF**
+  (iPhone photos — converted server-side via `pillow-heif`), and PDF.
+  Requires `ANTHROPIC_API_KEY` in the environment; the upload card hides
+  itself when unconfigured. Extracted drugs are matched to the catalogue.
+- **Bilingual sig**: auto-generated EN + TH directions
+  (e.g. "Take 2 tablets orally twice daily after meals" /
+  "รับประทานครั้งละ 2 เม็ด วันละ 2 ครั้ง หลังอาหาร"), overridable per line.
+- **Frontend**: `frontend/pages/PrescriptionWriter.jsx` — patient & drug
+  pickers, structured sig entry, print-ready A4 letterhead sheet.
+- **Migration**: `m4_002_prescription_generator.py` (head after m7_001).

@@ -137,6 +137,25 @@ _TRANSLATIONS = {
     "pharmacy.refrigeration":       ("Requires Refrigeration", "ต้องเก็บในตู้เย็น"),
     "pharmacy.controlled":          ("Controlled Substance", "วัตถุออกฤทธิ์"),
 
+    # Prescription Writer / เครื่องมือสร้างใบสั่งยา
+    "pharmacy.rx_writer":           ("Prescription Writer", "สร้างใบสั่งยา"),
+    "pharmacy.rx_fill_from_doc":    ("Fill from a document", "ดึงข้อมูลจากเอกสาร"),
+    "pharmacy.rx_extracting":       ("Reading the document...", "กำลังอ่านเอกสาร..."),
+    "pharmacy.rx_pack_size":        ("Pack size", "จำนวนต่อกล่อง"),
+    "pharmacy.rx_per_dose":         ("Per dose", "ครั้งละ"),
+    "pharmacy.rx_times_per_day":    ("Times per day", "ครั้งต่อวัน"),
+    "pharmacy.rx_duration_days":    ("Duration (days)", "จำนวนวัน"),
+    "pharmacy.rx_sig":              ("Directions (Sig)", "วิธีใช้ยา"),
+    "pharmacy.rx_quantity":         ("Quantity", "จำนวนจ่าย"),
+    "pharmacy.rx_diagnosis":        ("Diagnosis", "การวินิจฉัย"),
+    "pharmacy.rx_note":             ("Note on prescription", "หมายเหตุบนใบสั่งยา"),
+    "pharmacy.rx_save":             ("Save prescription", "บันทึกใบสั่งยา"),
+    "pharmacy.rx_save_print":       ("Save & print", "บันทึกและพิมพ์"),
+    "pharmacy.rx_signature":        ("Prescriber's Signature", "ลายมือชื่อผู้สั่งยา"),
+    "pharmacy.rx_license_no":       ("Medical License No.", "ใบอนุญาตประกอบวิชาชีพเวชกรรมเลขที่"),
+    "pharmacy.rx_validity":         ("This prescription is valid only when signed by the prescriber.",
+                                     "ใบสั่งยานี้มีผลเมื่อลงนามโดยผู้สั่งยาเท่านั้น"),
+
     # ── Patient / ผู้ป่วย ────────────────────────────────
     "patient.hn":                   ("HN", "เลข HN"),
     "patient.name_en":              ("Name (English)", "ชื่อ (อังกฤษ)"),
