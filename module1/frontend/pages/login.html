@@ -769,7 +769,7 @@
 
       sessionStorage.setItem('fcms_token', data.access_token);
       sessionStorage.setItem('fcms_user', JSON.stringify(data.user));
-      window.location.href = '/dashboard';
+      window.location.href = new URLSearchParams(window.location.search).get('next') || '/dashboard';
     } catch (err) {
       showError(currentLang === 'en' ? 'Connection error. Please try again.' : 'ข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
     } finally {
@@ -810,7 +810,7 @@
 
       sessionStorage.setItem('fcms_token', data.access_token);
       sessionStorage.setItem('fcms_user', JSON.stringify(data.user));
-      window.location.href = '/dashboard';
+      window.location.href = new URLSearchParams(window.location.search).get('next') || '/dashboard';
     } catch (err) {
       showError(currentLang === 'en' ? 'Verification failed' : 'ยืนยันล้มเหลว');
     } finally {

@@ -46,7 +46,8 @@ try:
 except ImportError:
     pass
 
-for _mod in ("module5.backend.models.supply_models","module6.backend.models.crm_models","module7.backend.models.accounting_models"):
+for _mod in ("module5.backend.models.supply_models","module6.backend.models.crm_models","module7.backend.models.accounting_models",
+             "module10.backend.models.timeline_models"):
     try:
         __import__(_mod)
     except ImportError:

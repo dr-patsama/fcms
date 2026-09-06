@@ -31,6 +31,9 @@ no notion of a treatment cycle.
 ## 2. New / extended modules
 
 ### M1-ext  Treatment Plan + Cycle Plan (core of the vision)
+- **Done (v1):** the existing Timeline Generator is embedded as Module 10 at `/timeline`,
+  DB-backed and linked to EMR patients by HN. Its protocol/visit logic is the seed for the
+  `cycles` / `cycle_days` model below — reuse, don't rewrite.
 - `treatment_plans`: diagnosis → protocol → phases (OI / IUI / IVF-ICSI / FET / PRP / ERA)
 - `cycles`: LMP or D1 anchor, protocol template (antagonist, agonist, natural, mild,
   PPOS, HRT-FET, natural-FET), daily schedule generated from template

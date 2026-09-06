@@ -26,6 +26,7 @@ MODULE_ROUTERS = [
     ("module5.backend.api.supply_routes",          ["router"]),
     ("module6.backend.api.crm_routes",             ["router"]),
     ("module7.backend.api.accounting_routes",      ["router"]),
+    ("module10.backend.api.timeline_routes",       ["router"]),
 ]
 
 
@@ -57,6 +58,17 @@ def create_app() -> FastAPI:
     # ── Static: login page + design system (until the Next.js shell lands) ──
     root = Path(__file__).resolve().parent.parent
     app.mount("/design-system", StaticFiles(directory=root / "design-system"), name="design-system")
+
+    tl_dir = root / "module10" / "frontend" / "timeline"
+    app.mount("/timeline/vendor", StaticFiles(directory=tl_dir / "vendor"), name="timeline-vendor")
+
+    @app.get("/timeline", include_in_schema=False)
+    def timeline_page():
+        return FileResponse(tl_dir / "index.html")
+
+    @app.get("/dashboard", include_in_schema=False)
+    def dashboard_page():
+        return FileResponse(root / "app" / "static" / "dashboard.html")
 
     @app.get("/login", include_in_schema=False)
     def login_page():

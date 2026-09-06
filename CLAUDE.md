@@ -145,4 +145,5 @@ Label printing: Pharmacy labels are **80×50mm**; lab tube labels are **40×20mm
 | 5 — Medical Supply (Catalogue, Requisitions, Usage) | ✅ Done |
 | 6 — CRM (Appointments, Virtual Consultation, Reminders) | ✅ Done |
 | 7 — Accounting (invoices, receipts, expenses, WHT, P&L/AR) | ✅ Done |
-| 8–15 — see ROADMAP.md (Cycle Plan, OR, Patient App, Billing ext, Calculators, Marketing, Insight) | ⬜ Planned |
+| 10 — Cycle Plan / Timeline Generator (embedded upstream app, DB-backed, patient-linked) | ✅ Done (v1) |
+| 8, 9, 11–15 — see ROADMAP.md | ⬜ Planned |

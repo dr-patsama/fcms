@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><title>FCMS — Life by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css">
+<style>
+@font-face{font-family:Cloud;src:url(/design-system/fonts/Cloud-Regular.ttf);font-weight:400}
+@font-face{font-family:Cloud;src:url(/design-system/fonts/Cloud-Bold.ttf);font-weight:700}
+body{margin:0;font-family:Cloud,system-ui,sans-serif;background:#F9FAFB;color:#111827;display:flex;min-height:100vh}
+aside{width:240px;background:#E0115F;color:#fff;padding:24px 20px;box-sizing:border-box}
+aside h1{font-size:18px;margin:0 0 4px}aside p{font-size:12px;opacity:.85;margin:0 0 24px}
+main{flex:1;padding:32px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+a.card{display:block;background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:18px;text-decoration:none;color:#111827}
+a.card:hover{border-color:#0F52BA;box-shadow:0 2px 8px rgba(15,82,186,.12)}
+a.card b{display:block;color:#151667;font-size:16px;margin-bottom:4px}a.card span{font-size:13px;color:#6B7280}
+.soon{opacity:.45;pointer-events:none}
+#who{font-size:13px;color:#6B7280;margin-bottom:20px}
+button{background:#151667;color:#fff;border:0;border-radius:6px;padding:8px 14px;font-family:inherit;cursor:pointer}
+</style></head><body>
+<aside><h1>Life by Dr. Pat</h1><p>Fertility Clinic Management System</p><button onclick="sessionStorage.clear();location.href='/login'">Sign out / ออกจากระบบ</button></aside>
+<main><div id="who"></div>
+<div class="grid">
+<a class="card" href="/timeline"><b>Cycle Plan / Timeline</b><span>OPU · FET · ORA · IUI timeline generator — แผนการรักษารอบ</span></a>
+<a class="card" href="/docs"><b>API Explorer</b><span>All modules · Swagger</span></a>
+<a class="card soon" href="#"><b>EMR</b><span>Patients, visits, SOAP — UI pending</span></a>
+<a class="card soon" href="#"><b>Lab</b><span>General · Embryology · Andrology</span></a>
+<a class="card soon" href="#"><b>Ultrasound</b><span>GE Voluson Swift · DICOM</span></a>
+<a class="card soon" href="#"><b>Pharmacy</b><span>Stock · Dispensing · Labels</span></a>
+<a class="card soon" href="#"><b>Medical Supply</b><span>Requisitions · Usage</span></a>
+<a class="card soon" href="#"><b>CRM</b><span>Appointments · Reminders</span></a>
+<a class="card soon" href="#"><b>Accounting</b><span>Invoices · Receipts · P&amp;L</span></a>
+</div></main>
+<script>
+const t=sessionStorage.getItem('fcms_token');if(!t){location.href='/login';}
+try{const u=JSON.parse(sessionStorage.getItem('fcms_user')||'{}');document.getElementById('who').textContent=(u.first_name_th||u.first_name_en||u.email||'')+' · '+(u.role||'');}catch(e){}
+</script></body></html>
