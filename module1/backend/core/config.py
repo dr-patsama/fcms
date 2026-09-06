@@ -36,7 +36,17 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_MB: int = 50
 
+    @classmethod
+    def _split(cls, v):
+        return [x.strip() for x in v.split(",")] if isinstance(v, str) else v
+
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.CORS_ORIGINS = self._split(self.CORS_ORIGINS)
+        self.MFA_REQUIRED_ROLES = self._split(self.MFA_REQUIRED_ROLES)
 
 settings = Settings()

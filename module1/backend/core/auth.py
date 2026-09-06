@@ -54,8 +54,61 @@ async def get_current_user(
     return user
 
 
-def require_roles(allowed_roles: List[str]):
-    """Dependency factory: restrict endpoint to specific roles"""
+# Aliases used by some modules → canonical SYSTEM_ROLES key
+ROLE_ALIASES = {
+    "accountant": "billing_staff",
+    "cashier":    "billing_staff",
+    "front_desk": "receptionist",
+    "manager":    "admin",
+}
+MODULE_ALIASES = {"medical_supply": "supplies", "supply": "supplies"}
+SUPERUSER_LEVEL = 95  # admin (100) and it_admin (95) pass every role check
+
+
+def canonical_role(role: str) -> str:
+    return ROLE_ALIASES.get(role, role)
+
+
+def role_level(role: str) -> int:
+    return SYSTEM_ROLES.get(canonical_role(role), {}).get("level", 0)
+
+
+def _load_user(user_id, db):
+    from ..models.user_models import User
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
+
+
+def require_roles(*roles):
+    """Dependency factory: restrict endpoint to specific roles.
+    Accepts require_roles(["a","b"]) or require_roles("a","b").
+    Hierarchy: admin / it_admin always pass."""
+    allowed = set()
+    for r in roles:
+        allowed.update(r if isinstance(r, (list, tuple, set)) else [r])
+    allowed = {canonical_role(r) for r in allowed}
+
+    async def _check(
+        credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+        db: Session = Depends(get_db)
+    ):
+        try:
+            payload = decode_access_token(credentials.credentials)
+            user_id = payload.get("sub")
+            role = canonical_role(payload.get("role"))
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        if role not in allowed and role_level(role) < SUPERUSER_LEVEL:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return _load_user(user_id, db)
+    return _check
+
+
+def require_min_level(min_level: int):
+    """Dependency factory: hierarchical check — any role at or above `min_level`."""
     async def _check(
         credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
         db: Session = Depends(get_db)
@@ -66,15 +119,9 @@ def require_roles(allowed_roles: List[str]):
             role = payload.get("role")
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
-
-        if role not in allowed_roles and role != "admin":
+        if role_level(role) < min_level:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
-
-        from ..models.user_models import User
-        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
+        return _load_user(user_id, db)
     return _check
 
 
@@ -91,11 +138,13 @@ def require_module_access(module_name: str):
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
 
+        role = canonical_role(role)
+        module_name_c = MODULE_ALIASES.get(module_name, module_name)
         role_config = SYSTEM_ROLES.get(role)
         if not role_config:
             raise HTTPException(status_code=403, detail="Unknown role")
 
-        if "*" not in role_config["modules"] and module_name not in role_config["modules"]:
+        if "*" not in role_config["modules"] and module_name_c not in role_config["modules"]:
             raise HTTPException(status_code=403, detail=f"No access to {module_name} module")
 
         from ..models.user_models import User

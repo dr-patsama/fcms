@@ -19,15 +19,15 @@ Clinic name: **Life by Dr. Pat** / **คลินิก ไลฟ์ บาย �
 ## Common Commands
 
 ```bash
-# Backend — from module1/backend (or relevant module)
-source backend/.venv/bin/activate
-uvicorn main:app --reload --port 8000
+# All modules, one process — run from repo root
+export PYTHONPATH=.
+alembic upgrade head                 # all 7 module migration dirs are chained
+python seed_admin.py [--all]         # admin (+ one demo user per role with --all)
+uvicorn app.main:app --reload --port 8000
+# → http://localhost:8000/login  · /docs · /health lists loaded modules
 
-# Run migrations
-alembic upgrade head
-
-# Seed default admin
-python seed_admin.py
+# Production on Synology NAS (Docker): see deploy/synology/README.md
+cd deploy/synology && cp .env.example .env && docker compose up -d --build
 
 # Frontend
 npm install && npm run dev
@@ -79,7 +79,8 @@ moduleN/
   - `get_current_user` — decode JWT, return user
   - `require_roles(["physician", ...])` — role whitelist
   - `require_module_access("pharmacy")` — module-level RBAC
-- All modules import auth/db from `module1/backend/core/` via relative paths
+- Modules 2–7 have `backend/core/*` and `backend/models/user_models.py` **shims** that re-export module1's core; routes keep `from ..core.auth import ...` and everything resolves to one shared DB/auth stack
+- `app/main.py` mounts every module router; a broken module is reported in `/health.modules_failed` instead of taking the API down
 
 ### Database
 
@@ -96,6 +97,8 @@ moduleN/
 ### Auth & RBAC
 
 JWT claims include `sub` (user_id) and `role`. RBAC enforced at route level via dependency injection. MFA (TOTP) mandatory for: `physician`, `embryologist`, `lab_supervisor`, `admin`.
+
+`require_roles(...)` accepts a list or varargs; `admin`/`it_admin` (level ≥ 95) pass every role check; `require_min_level(n)` is available for pure hierarchy checks. Aliases: accountant/cashier→billing_staff, front_desk→receptionist, manager→admin; module alias medical_supply→supplies.
 
 Key role levels (higher = more access):
 - `admin` (100), `it_admin` (95), `physician` (90), `embryologist` (85)

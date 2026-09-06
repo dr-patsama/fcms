@@ -16,7 +16,7 @@ def gen_uuid():
     return str(uuid.uuid4())
 
 # Import Base from shared core (module1)
-from ...module1.backend.core.database import Base
+from module1.backend.core.database import Base
 
 
 # ── Drug Catalogue ─────────────────────────────────────────

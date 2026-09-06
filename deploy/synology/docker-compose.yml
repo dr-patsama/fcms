@@ -1,0 +1,95 @@
+# FCMS — Life by Dr. Pat — Synology NAS stack (Container Manager / docker compose)
+# Place this folder at /volume1/docker/fcms and run: docker compose up -d --build
+name: fcms
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fcms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fcms_db}
+      POSTGRES_USER: ${POSTGRES_USER:-fcms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      TZ: Asia/Bangkok
+    volumes:
+      - /volume1/docker/fcms/data/postgres:/var/lib/postgresql/data
+      - /volume1/docker/fcms/backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fcms_user} -d ${POSTGRES_DB:-fcms_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # DB is NOT published to the LAN — only reachable inside the compose network.
+
+  redis:
+    image: redis:7-alpine
+    container_name: fcms-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /volume1/docker/fcms/data/redis:/data
+
+  orthanc:
+    image: jodogne/orthanc-plugins:1.12.4
+    container_name: fcms-orthanc
+    restart: unless-stopped
+    ports:
+      - "8042:8042"   # Orthanc web UI / REST
+      - "4242:4242"   # DICOM — point the GE Voluson Swift here (AET FCMS_ORTHANC)
+    volumes:
+      - /volume1/docker/fcms/data/orthanc:/var/lib/orthanc/db
+      - ./orthanc.json:/etc/orthanc/orthanc.json:ro
+    environment:
+      TZ: Asia/Bangkok
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: fcms-api:latest
+    container_name: fcms-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fcms_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fcms_db}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?set in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://fcms.local}
+      ORTHANC_URL: http://orthanc:8042
+      ORTHANC_USER: ${ORTHANC_USER:-orthanc}
+      ORTHANC_PASSWORD: ${ORTHANC_PASSWORD:-orthanc}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@lifeclinic.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set in .env}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-Fcms2026!}
+      SEED_MODE: ${SEED_MODE:-admin}
+      WORKERS: "2"
+      UPLOAD_DIR: /app/uploads
+      DB_HOST: db
+    volumes:
+      - /volume1/docker/fcms/data/uploads:/app/uploads
+    ports:
+      - "8000:8000"
+
+  backup:
+    image: postgres:16-alpine
+    container_name: fcms-backup
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Bangkok
+    volumes:
+      - /volume1/docker/fcms/backups:/backups
+    # nightly 02:00 dump, keep 30 days (also enable Hyper Backup on /volume1/docker/fcms)
+    entrypoint: >
+      sh -c 'while true; do
+        now=$$(date +%%s); target=$$(date -d "tomorrow 02:00" +%%s 2>/dev/null || echo $$((now+86400)));
+        sleep $$((target-now));
+        pg_dump -h db -U ${POSTGRES_USER:-fcms_user} ${POSTGRES_DB:-fcms_db} | gzip > /backups/fcms_$$(date +%%Y%%m%%d_%%H%%M).sql.gz;
+        find /backups -name "fcms_*.sql.gz" -mtime +30 -delete;
+      done'

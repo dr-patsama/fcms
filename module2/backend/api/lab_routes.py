@@ -26,7 +26,7 @@ from ..services.lab_service import LabService
 from ..services.import_service import ImportService
 # These come from Module 1 core
 from ..core.database import get_db
-from ..core.auth import get_current_user, require_roles
+from ..core.auth import get_current_user, require_roles, require_module_access
 
 router = APIRouter(prefix="/api/v1/lab", tags=["Lab Management"])
 

@@ -15,7 +15,7 @@ import uuid
 def gen_uuid():
     return str(uuid.uuid4())
 
-from ...module1.backend.core.database import Base
+from module1.backend.core.database import Base
 
 
 # ── Appointment / การนัดหมาย ──────────────────────────────

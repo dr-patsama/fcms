@@ -29,10 +29,11 @@ router = APIRouter(prefix="/api/v1/ultrasound", tags=["Ultrasound / DICOM"])
 # CONFIGURATION — Orthanc Server Connection
 # ═══════════════════════════════════════════════════════════
 
+import os
 ORTHANC_CONFIG = {
-    "url": "http://localhost:8042",       # Orthanc REST API
-    "username": "orthanc",
-    "password": "orthanc",
+    "url": os.getenv("ORTHANC_URL", "http://localhost:8042"),   # Orthanc REST API
+    "username": os.getenv("ORTHANC_USER", "orthanc"),
+    "password": os.getenv("ORTHANC_PASSWORD", "orthanc"),
     "dicom_web_root": "/dicom-web",
     "ae_title": "FCMS_ORTHANC",           # Our AE Title for VOLUSON to push to
     "voluson_ae_title": "VOLUSON_SWIFT",   # VOLUSON Swift AE Title

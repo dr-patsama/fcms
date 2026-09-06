@@ -15,7 +15,7 @@ from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import enum
 
-Base = declarative_base()
+from module1.backend.core.database import Base  # shared metadata
 
 def gen_uuid():
     return str(uuid.uuid4())
