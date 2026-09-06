@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from module1.backend.core.config import settings
+from app.dashboards.routes import router as dashboard_router
 
 log = logging.getLogger("fcms")
 
@@ -58,6 +59,17 @@ def create_app() -> FastAPI:
     # ── Static: login page + design system (until the Next.js shell lands) ──
     root = Path(__file__).resolve().parent.parent
     app.mount("/design-system", StaticFiles(directory=root / "design-system"), name="design-system")
+
+    app.include_router(dashboard_router)
+    app.mount("/static", StaticFiles(directory=root / "app" / "static"), name="app-static")
+
+    @app.get("/board/opd", include_in_schema=False)
+    def opd_board():
+        return FileResponse(root / "app" / "static" / "opd.html")
+
+    @app.get("/board/embryo", include_in_schema=False)
+    def embryo_board():
+        return FileResponse(root / "app" / "static" / "embryo.html")
 
     tl_dir = root / "module10" / "frontend" / "timeline"
     app.mount("/timeline/vendor", StaticFiles(directory=tl_dir / "vendor"), name="timeline-vendor")

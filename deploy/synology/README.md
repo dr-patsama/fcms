@@ -24,6 +24,8 @@ sudo docker compose logs -f api      # wait for "starting FCMS on :8000"
 ```
 Then open **http://<nas-ip>:8000/login** → sign in as the admin from `.env`.
 API docs: http://<nas-ip>:8000/docs   Orthanc: http://<nas-ip>:8042
+Live boards (auto-updating, for wall screens): http://<nas-ip>:8000/board/opd · /board/embryo
+Cycle plan / timeline: http://<nas-ip>:8000/timeline
 
 ## 4. GE Voluson Swift
 DICOM → Send-to node: AE title `FCMS_ORTHANC`, host `<nas-ip>`, port `4242`.

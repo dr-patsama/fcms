@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>OPD Board — Life by Dr. Pat</title>
+<link rel="stylesheet" href="/static/board.css"></head><body>
+<header><div><h1 data-en="OPD Live Board" data-th="กระดานผู้ป่วยนอก (OPD)"></h1><div class="sub">Life by Dr. Pat</div></div>
+<div id="live" class="live off"><i class="dot"></i><span>…</span></div><div class="spacer"></div>
+<div><div class="clock" id="clock"></div><div class="date" id="date"></div></div><button class="lang" id="lang"></button></header>
+<main>
+<div class="kpis">
+ <div class="kpi"><div class="v" id="k_total">—</div><div class="l" data-en="Appointments today" data-th="นัดวันนี้"></div></div>
+ <div class="kpi amber"><div class="v" id="k_waiting">—</div><div class="l" data-en="Waiting" data-th="รอตรวจ"></div></div>
+ <div class="kpi emerald"><div class="v" id="k_inprog">—</div><div class="l" data-en="In room" data-th="กำลังตรวจ"></div></div>
+ <div class="kpi"><div class="v" id="k_done">—</div><div class="l" data-en="Completed" data-th="เสร็จแล้ว"></div></div>
+ <div class="kpi"><div class="v" id="k_upcoming">—</div><div class="l" data-en="Still to come" data-th="ยังไม่มา"></div></div>
+ <div class="kpi ruby"><div class="v" id="k_wait">—</div><div class="l" data-en="Avg / max wait (min)" data-th="รอเฉลี่ย / สูงสุด (นาที)"></div></div>
+ <div class="kpi"><div class="v" id="k_proc">—</div><div class="l" data-en="Procedures" data-th="หัตถการ"></div></div>
+ <div class="kpi amber"><div class="v" id="k_lab">—</div><div class="l" data-en="Lab pending / unverified" data-th="แล็บรอผล / รอยืนยัน"></div></div>
+ <div class="kpi"><div class="v" id="k_us">—</div><div class="l" data-en="Ultrasound today" data-th="อัลตราซาวด์วันนี้"></div></div>
+</div>
+<div class="cols">
+ <div class="panel"><h2 class="amber"><span data-en="Waiting room" data-th="รอตรวจ"></span><span class="n">0</span></h2><div class="list" id="waiting"></div></div>
+ <div class="panel"><h2 class="emerald"><span data-en="In consultation" data-th="กำลังตรวจ"></span><span class="n">0</span></h2><div class="list" id="inprog"></div></div>
+ <div class="panel"><h2><span data-en="Upcoming" data-th="นัดที่ยังไม่มา"></span><span class="n">0</span></h2><div class="list" id="upcoming"></div></div>
+ <div class="panel"><h2 class="ruby"><span data-en="Procedures today" data-th="หัตถการวันนี้"></span><span class="n">0</span></h2><div class="list" id="proc"></div></div>
+ <div class="panel"><h2><span data-en="Lab orders" data-th="รายการแล็บ"></span><span class="n">0</span></h2><div class="list" id="lab"></div></div>
+ <div class="panel"><h2><span data-en="Ultrasound / Virtual" data-th="อัลตราซาวด์ / ปรึกษาออนไลน์"></span><span class="n">0</span></h2><div class="list" id="us"></div></div>
+</div></main>
+<footer><span id="upd"></span><span id="err"></span><span data-en="Auto-updates when any record changes" data-th="อัปเดตอัตโนมัติเมื่อข้อมูลเปลี่ยน"></span></footer>
+<script src="/static/board.js"></script>
+<script>
+const TYPE_TH={new_patient:'ผู้ป่วยใหม่',follow_up:'ติดตาม',consultation:'ปรึกษา',ultrasound:'อัลตราซาวด์',blood_test:'เจาะเลือด',egg_collection:'เก็บไข่ (OPU)',embryo_transfer:'ย้ายตัวอ่อน (ET)',iui:'IUI',virtual_consultation:'ปรึกษาออนไลน์',hysteroscopy:'ส่องกล้องโพรงมดลูก',prp:'PRP',procedure:'หัตถการ',other:'อื่นๆ'};
+const STATUS={scheduled:['Scheduled','นัดแล้ว','grey'],confirmed:['Confirmed','ยืนยันแล้ว',''],checked_in:['Waiting','รอตรวจ','amber'],in_progress:['In room','กำลังตรวจ','emerald'],completed:['Done','เสร็จ','emerald'],no_show:['No-show','ไม่มา','ruby'],cancelled:['Cancelled','ยกเลิก','ruby'],rescheduled:['Moved','เลื่อน','grey']};
+function render(s,T,u){
+ const k=s.kpis;Board.kpi('k_total',k.total);Board.kpi('k_waiting',k.waiting);Board.kpi('k_inprog',k.in_progress);Board.kpi('k_done',k.completed);Board.kpi('k_upcoming',k.upcoming);
+ Board.kpi('k_wait',`${k.avg_wait} / ${k.max_wait}`);Board.kpi('k_proc',k.procedures);Board.kpi('k_lab',`${k.lab_pending} / ${k.lab_unverified}`);Board.kpi('k_us',k.us_today);
+ const type=a=>T(a.appointment_type_th&&T('x','y')==='y'?a.appointment_type_th:(a.appointment_type||'').replace(/_/g,' '),a.appointment_type_th||TYPE_TH[a.appointment_type]||a.appointment_type);
+ const prov=a=>a.provider_first?` · ${T(a.provider_first,a.provider_first_th||a.provider_first)}`:'';
+ const st=a=>{const x=STATUS[a.status]||[a.status,a.status,'grey'];return `<span class="tag ${x[2]}">${T(x[0],x[1])}</span>`;};
+ const row=(a,right)=>`<div class="row ${a.priority==='urgent'?'urgent':''} ${a.is_late?'late':''}"><div class="t">${u.hhmm(a.appointment_time)}</div><div><div class="name">${u.esc(u.name(a))} <span class="meta">${u.esc(a.hn||'')}</span></div><div class="meta">${u.esc(type(a))}${u.esc(prov(a))}${a.room?' · '+u.esc(a.room):''}${a.priority==='urgent'?' · <b style="color:var(--ruby)">'+T('URGENT','ด่วน')+'</b>':''}</div></div><div>${right}</div></div>`;
+ const wcls=m=>m>=45?'w2':m>=20?'w1':'';
+ Board.panel('waiting',s.waiting,a=>row(a,`<span class="wait ${wcls(a.wait_minutes)}">${a.wait_minutes??0} ${T('min','นาที')}</span>`),T('No one waiting','ไม่มีผู้ป่วยรอ'));
+ Board.panel('inprog',s.in_progress,a=>row(a,st(a)),T('No consultation in progress','ยังไม่มีการตรวจ'));
+ Board.panel('upcoming',s.upcoming,a=>row(a,a.is_late?`<span class="tag ruby">${T('Late','เลยเวลา')}</span>`:st(a)),T('All patients have arrived','ผู้ป่วยมาครบแล้ว'));
+ Board.panel('proc',s.procedures,a=>row(a,st(a)),T('No procedures today','ไม่มีหัตถการวันนี้'));
+ Board.panel('lab',s.lab,l=>`<div class="row"><div class="t">${u.hhmm(l.ordered_at)}</div><div><div class="name">${u.esc(u.name(l))} <span class="meta">${u.esc(l.hn||'')}</span></div><div class="meta">${u.esc(l.order_number)} · ${u.esc(l.lab_type)}${l.priority!=='routine'?' · <b style="color:var(--ruby)">'+u.esc(l.priority.toUpperCase())+'</b>':''}</div></div><div><span class="tag ${l.status==='resulted'?'amber':l.status==='pending'?'grey':''}">${u.esc(l.status)}</span></div></div>`,T('No open lab orders','ไม่มีรายการแล็บค้าง'));
+ const usv=[...s.ultrasound.map(x=>({t:x.study_time,n:u.name(x),hn:x.hn,m:'TVUS · '+(x.study_description||''),tag:x.status})),...s.virtual.map(x=>({t:u.hhmm(x.scheduled_start),n:u.name(x),hn:x.hn,m:T('Virtual consultation','ปรึกษาออนไลน์'),tag:x.status}))];
+ Board.panel('us',usv,x=>`<div class="row"><div class="t">${u.esc(String(x.t||'').slice(0,5))}</div><div><div class="name">${u.esc(x.n)} <span class="meta">${u.esc(x.hn||'')}</span></div><div class="meta">${u.esc(x.m)}</div></div><div><span class="tag grey">${u.esc(x.tag||'')}</span></div></div>`,T('Nothing yet today','ยังไม่มีรายการวันนี้'));
+}
+Board.init('opd',render);
+</script></body></html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>Embryology Lab Board — Life by Dr. Pat</title>
+<link rel="stylesheet" href="/static/board.css"></head><body>
+<header><div><h1 data-en="Embryology Lab Live Board" data-th="กระดานห้องปฏิบัติการตัวอ่อน"></h1><div class="sub">Life by Dr. Pat</div></div>
+<div id="live" class="live off"><i class="dot"></i><span>…</span></div><div class="spacer"></div>
+<div><div class="clock" id="clock"></div><div class="date" id="date"></div></div><button class="lang" id="lang"></button></header>
+<main>
+<div class="kpis">
+ <div class="kpi"><div class="v" id="k_opu">—</div><div class="l" data-en="OPU done / scheduled" data-th="เก็บไข่แล้ว / รอเก็บ"></div></div>
+ <div class="kpi emerald"><div class="v" id="k_ooc">—</div><div class="l" data-en="Oocytes / MII today" data-th="ไข่ / MII วันนี้"></div></div>
+ <div class="kpi amber"><div class="v" id="k_fert">—</div><div class="l" data-en="Fertilization checks due" data-th="ถึงเวลาตรวจการปฏิสนธิ"></div></div>
+ <div class="kpi"><div class="v" id="k_fr">—</div><div class="l" data-en="2PN rate today" data-th="อัตรา 2PN วันนี้"></div></div>
+ <div class="kpi"><div class="v" id="k_cult">—</div><div class="l" data-en="Embryos in culture (patients)" data-th="ตัวอ่อนในตู้เลี้ยง (คนไข้)"></div></div>
+ <div class="kpi amber"><div class="v" id="k_assess">—</div><div class="l" data-en="Assessments due" data-th="รอประเมินตัวอ่อน"></div></div>
+ <div class="kpi ruby"><div class="v" id="k_et">—</div><div class="l" data-en="Transfers today" data-th="ย้ายตัวอ่อนวันนี้"></div></div>
+ <div class="kpi"><div class="v" id="k_wf">—</div><div class="l" data-en="Warm / freeze today" data-th="ละลาย / แช่แข็งวันนี้"></div></div>
+ <div class="kpi"><div class="v" id="k_cryo">—</div><div class="l" data-en="Embryos in cryo" data-th="ตัวอ่อนแช่แข็งทั้งหมด"></div></div>
+ <div class="kpi"><div class="v" id="k_andro">—</div><div class="l" data-en="Semen analyses today" data-th="ตรวจน้ำเชื้อวันนี้"></div></div>
+</div>
+<div class="cols">
+ <div class="panel"><h2 class="ruby"><span data-en="OPU today" data-th="เก็บไข่วันนี้"></span><span class="n">0</span></h2><div class="list" id="opu"></div></div>
+ <div class="panel"><h2 class="amber"><span data-en="Fertilization check due (16–18 h)" data-th="ตรวจการปฏิสนธิ (16–18 ชม.)"></span><span class="n">0</span></h2><div class="list" id="fert"></div></div>
+ <div class="panel"><h2 class="emerald"><span data-en="In culture" data-th="ตัวอ่อนในตู้เลี้ยง"></span><span class="n">0</span></h2><div class="list" id="cult"></div></div>
+ <div class="panel"><h2 class="ruby"><span data-en="Embryo transfer today" data-th="ย้ายตัวอ่อนวันนี้"></span><span class="n">0</span></h2><div class="list" id="et"></div></div>
+ <div class="panel"><h2><span data-en="Warming & freezing today" data-th="ละลาย / แช่แข็งวันนี้"></span><span class="n">0</span></h2><div class="list" id="wf"></div></div>
+ <div class="panel"><h2><span data-en="Cryo tanks · Andrology" data-th="ถังไนโตรเจน · ห้องแล็บน้ำเชื้อ"></span><span class="n">0</span></h2><div class="list" id="misc"></div></div>
+</div></main>
+<footer><span id="upd"></span><span id="err"></span><span data-en="Auto-updates when any record changes" data-th="อัปเดตอัตโนมัติเมื่อข้อมูลเปลี่ยน"></span></footer>
+<script src="/static/board.js"></script>
+<script>
+function render(s,T,u){
+ const k=s.kpis;Board.kpi('k_opu',`${k.opu_done} / ${k.opu_scheduled}`);Board.kpi('k_ooc',`${k.oocytes_today} / ${k.mii_today}`);Board.kpi('k_fert',k.fert_checks_due);
+ Board.kpi('k_fr',k.fert_rate_today==null?'—':k.fert_rate_today+'%');Board.kpi('k_cult',`${k.in_culture} (${k.patients_in_culture})`);Board.kpi('k_assess',k.assessments_due);
+ Board.kpi('k_et',k.transfers_today);Board.kpi('k_wf',`${k.warmings_today} / ${k.freezes_today}`);Board.kpi('k_cryo',k.cryo_total);Board.kpi('k_andro',k.andrology_today);
+ const pt=x=>`<div class="name">${u.esc(u.name(x))} <span class="meta">${u.esc(x.hn||'')}</span></div>`;
+ const opu=[...s.opu_scheduled.map(x=>({t:x.appointment_time,x,sched:true})),...s.opu.map(x=>({t:x.start_time,x,sched:false}))];
+ Board.panel('opu',opu,o=>o.sched?`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${T('Scheduled','นัดเก็บไข่')}${o.x.room?' · '+u.esc(o.x.room):''}</div></div><div><span class="tag grey">${u.esc(o.x.status)}</span></div></div>`
+  :`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${u.esc(o.x.cycle_number||'')} · ${T('Follicles','ฟอลลิเคิล')} ${o.x.total_follicles_aspirated??'—'} · ${T('Oocytes','ไข่')} <b>${o.x.total_oocytes_retrieved??'—'}</b> · MII ${o.x.mii_count??'—'} · MI ${o.x.mi_count??'—'} · GV ${o.x.gv_count??'—'}</div></div><div><span class="tag ${o.x.inseminated>0?'emerald':'amber'}">${o.x.inseminated}/${o.x.oocytes_logged} ${T('inseminated','ผสมแล้ว')}</span></div></div>`,T('No OPU today','ไม่มีการเก็บไข่วันนี้'));
+ Board.panel('fert',s.fert_due,f=>{const due=new Date(f.check_due),late=due<new Date();return `<div class="row ${late?'late':''}"><div class="t">${u.hhmm(f.check_due)}</div><div>${pt(f)}<div class="meta">${T('Oocyte','ไข่')} #${f.oocyte_number} · ${u.esc(f.insemination_method||'')} @ ${u.hhmm(f.insemination_time)}</div></div><div><span class="tag ${late?'ruby':'amber'}">${late?T('Overdue','เลยเวลา'):T('Due','ถึงเวลา')}</span></div></div>`;},T('No checks pending','ไม่มีรายการรอตรวจ'));
+ Board.panel('cult',s.culture,g=>`<div class="row"><div class="t">D${g.culture_day}</div><div>${pt(g)}<div class="chips" style="margin-top:4px">${g.embryos.map(e=>`<span class="chip ${e.pgta_result||''}">${u.esc(e.embryo_code.replace(/^EMB-/,''))}${e.last_grade?' '+u.esc(e.last_grade):''}${e.pgta_result?' · '+u.esc(e.pgta_result):''}</span>`).join('')}</div></div><div>${g.assessment_due?`<span class="tag amber">${g.assessment_due} ${T('to assess','รอประเมิน')}</span>`:''}${g.decision_due?`<br><span class="tag ruby">${T('Decide: ET / freeze','ตัดสินใจ ย้าย/แช่แข็ง')}</span>`:''}</div></div>`,T('No embryos in culture','ไม่มีตัวอ่อนในตู้เลี้ยง'));
+ const et=[...s.et_scheduled.map(x=>({t:x.appointment_time,x,sched:true})),...s.transfers.map(x=>({t:x.transfer_date,x,sched:false}))];
+ Board.panel('et',et,o=>o.sched?`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${T('Scheduled','นัดย้ายตัวอ่อน')}${o.x.room?' · '+u.esc(o.x.room):''}</div></div><div><span class="tag grey">${u.esc(o.x.status)}</span></div></div>`
+  :`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${u.esc(o.x.embryo_code)} · ${u.esc(o.x.transfer_type||'')} · EM ${o.x.endometrial_thickness??'—'} mm${o.x.physician_first?' · '+u.esc(T(o.x.physician_first,o.x.physician_first_th||o.x.physician_first)):''}</div></div><div><span class="tag emerald">${T('Done','เสร็จ')}</span></div></div>`,T('No transfers today','ไม่มีการย้ายตัวอ่อนวันนี้'));
+ const wf=[...s.warmings.map(x=>({t:x.warming_date,x,w:true})),...s.freezes.map(x=>({t:x.freeze_date,x,w:false}))].sort((a,b)=>String(a.t).localeCompare(String(b.t)));
+ Board.panel('wf',wf,o=>o.w?`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${T('Warming','ละลาย')} · ${u.esc(o.x.embryo_code)}${o.x.post_warm_grade?' · '+u.esc(o.x.post_warm_grade):''}</div></div><div><span class="tag ${o.x.status==='survived'?'emerald':o.x.status==='degenerated'?'ruby':'amber'}">${u.esc(o.x.status)}</span></div></div>`
+  :`<div class="row"><div class="t">${u.hhmm(o.t)}</div><div>${pt(o.x)}<div class="meta">${T('Freeze','แช่แข็ง')} · ${u.esc(o.x.embryo_code)} · ${u.esc(o.x.method||'')} · ${u.esc([o.x.tank_id,o.x.canister,o.x.goblet,o.x.position].filter(Boolean).join('/'))}</div></div><div><span class="tag ${o.x.verified?'emerald':'amber'}">${o.x.verified?T('Verified','ยืนยันแล้ว'):T('Needs witness','รอผู้ยืนยัน')}</span></div></div>`,T('None today','ไม่มีรายการวันนี้'));
+ const misc=[...s.cryo.map(c=>({a:u.esc(c.tank_id||'?'),b:`${c.embryos} ${T('embryos','ตัวอ่อน')}`,tag:'cryo'})),...s.andrology.map(a=>({a:u.hhmm(a.created_at),b:`${u.esc(u.name(a))} <span class="meta">${u.esc(a.hn||'')}</span>`,tag:T('Semen analysis','ตรวจน้ำเชื้อ')}))];
+ Board.panel('misc',misc,m=>`<div class="row"><div class="t">${m.a}</div><div class="name">${m.b}</div><div><span class="tag grey">${m.tag}</span></div></div>`,T('Nothing to show','ไม่มีรายการ'));
+}
+Board.init('embryo',render);
+</script></body></html>

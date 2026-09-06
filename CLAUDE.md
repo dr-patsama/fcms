@@ -146,4 +146,13 @@ Label printing: Pharmacy labels are **80×50mm**; lab tube labels are **40×20mm
 | 6 — CRM (Appointments, Virtual Consultation, Reminders) | ✅ Done |
 | 7 — Accounting (invoices, receipts, expenses, WHT, P&L/AR) | ✅ Done |
 | 10 — Cycle Plan / Timeline Generator (embedded upstream app, DB-backed, patient-linked) | ✅ Done (v1) |
+| Live boards — OPD `/board/opd` · Embryology Lab `/board/embryo` (auto-update via SSE, EN/TH) | ✅ Done |
 | 8, 9, 11–15 — see ROADMAP.md | ⬜ Planned |
+
+## Live boards
+`/board/opd` and `/board/embryo` open an EventSource on `/api/v1/dashboard/{board}/stream?token=<jwt>`.
+The server re-queries every 3 s and pushes a `snapshot` event only when the data hash changes
+(heartbeat every 20 s; browser falls back to 10 s polling if SSE drops). Queries live in
+`app/dashboards/queries.py` — add a panel by adding a query there and a renderer in the HTML.
+Role gate: OPD = clinical + reception; Embryo = clinical/lab only. Put a TV on it with
+`/board/opd?token=<long-lived staff token>`.
