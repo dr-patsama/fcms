@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab To-Do — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const J = '/api/v1/journey';
+const GROUP_ORDER = ['opu', 'sperm_collection', 'sperm_prep', 'denudation', 'insemination', 'icsi', 'fert_check', 'cleavage_check', 'blast_check', 'biopsy', 'vitrification', 'oocyte_vitrification', 'warming', 'et', 'iui', 'sperm_freeze', 'semen_analysis', 'procedure'];
+const GROUP_TH = { opu: 'เก็บไข่', sperm_collection: 'เก็บน้ำเชื้อ', sperm_prep: 'เตรียมน้ำเชื้อ', denudation: 'ลอกเซลล์', insemination: 'ผสมเชื้อ', icsi: 'ICSI', fert_check: 'ตรวจปฏิสนธิ', cleavage_check: 'ตรวจการแบ่งตัว', blast_check: 'ตรวจบลาสโตซิสต์', biopsy: 'ตัดชิ้นเนื้อ', vitrification: 'แช่แข็ง', oocyte_vitrification: 'แช่แข็งไข่', warming: 'ละลาย', et: 'ย้ายตัวอ่อน', iui: 'IUI', sperm_freeze: 'แช่แข็งน้ำเชื้อ', semen_analysis: 'วิเคราะห์น้ำเชื้อ', procedure: 'หัตถการ' };
+
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [date, setDate] = useState(todayISO()); const [days, setDays] = useState(1); const [labDay, setLabDay] = useState(''); const [q, setQ] = useState(''); const [show, setShow] = useState('open');
+  const [data, setData] = useState({ groups: {}, tasks: [] }); const [sel, setSel] = useState([]); const [incidents, setIncidents] = useState([]);
+  const load = () => Promise.all([api(`${J}/lab/tasks?on=${date}&days=${days}${labDay !== '' ? '&lab_day=' + labDay : ''}${q ? '&q=' + encodeURIComponent(q) : ''}`), api(`${J}/lab/incidents`)]).then(([d, i]) => { setData(d); setIncidents(i); }).catch(e => toast(e.message, true));
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [date, days, labDay, q]);
+  const visible = (t) => show === 'all' || (show === 'open' ? t.status === 'pending' : t.status !== 'pending');
+  const groups = Object.entries(data.groups).sort((a, b) => GROUP_ORDER.indexOf(a[0]) - GROUP_ORDER.indexOf(b[0]));
+  const print = async (ids, types) => { try { openBlob(await api(`${J}/labels/print`, { body: { task_ids: ids, item_types: types } })); setSel([]); load(); } catch (e) { toast(e.message, true); } };
+  const done = async (t) => { try { await api(`${J}/lab/tasks/${t.id}/done`, { body: {} }); load(); } catch (e) { toast(e.message, true); } };
+  const fail = async (t) => { const reason = prompt('Reason / เหตุผล'); if (!reason) return; await api(`${J}/lab/tasks/${t.id}/failed`, { body: { reason } }); load(); };
+  const resolve = async (i) => { const resolution = prompt('Resolution'); if (!resolution) return; await api(`${J}/lab/incidents/${i.id}/resolve`, { body: { resolution } }); load(); };
+  const toggle = (id) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const counts = { pending: data.tasks.filter(t => t.effective_status === 'pending').length, blocked: data.tasks.filter(t => t.effective_status === 'blocked').length, done: data.tasks.filter(t => t.status === 'done').length, witness: data.tasks.filter(t => t.requires_witness && t.status === 'pending').length };
+  return <Shell active="/lab/todo" lang={lang} setLang={setLang} title={tr(lang, 'Lab To-Do')}
+    actions={<><button className="btn ghost sm" onClick={() => setDate(addDays(date, -1))}>‹</button><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /><button className="btn ghost sm" onClick={() => setDate(addDays(date, 1))}>›</button>
+      <button className="btn ghost sm" onClick={() => setDate(todayISO())}>{tr(lang, 'Today')}</button>
+      <select className="input" value={days} onChange={e => setDays(+e.target.value)}><option value={1}>1 day</option><option value={3}>3 days</option><option value={7}>7 days</option></select>
+      <input className="input" placeholder={tr(lang, 'Search') + ' HN / name'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 200 }} />
+      <button className="btn primary sm" disabled={!sel.length} onClick={() => print(sel)}>🖨 {tr(lang, 'Print labels')} ({sel.length})</button>
+      <button className="btn ghost sm" disabled={!sel.length} onClick={() => print(sel, ['cryo_device'])}>🖨 Cryo labels</button></>}>
+    <div className="daytabs">{['', 0, 1, 2, 3, 4, 5, 6, 7].map(d => <button key={d} className={labDay === d ? 'on' : ''} onClick={() => setLabDay(d)}>{d === '' ? tr(lang, 'All') : 'D' + d}</button>)}
+      <span className="right" /><div className="lang"><button className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>open</button><button className={show === 'closed' ? 'on' : ''} onClick={() => setShow('closed')}>done</button><button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>all</button></div></div>
+    <div className="grid c4" style={{ marginBottom: 14 }}><Stat label={tr(lang, 'Pending')} value={counts.pending} ink /><Stat label="Needs witness" value={counts.witness} /><Stat label={tr(lang, 'Blocked')} value={counts.blocked} small="unsigned consents" /><Stat label={tr(lang, 'Done')} value={counts.done} /></div>
+    {incidents.length > 0 && <div className="card" style={{ borderColor: 'var(--ruby)' }}><h2 style={{ color: 'var(--ruby)' }}>⚠ {tr(lang, 'Incidents')} ({incidents.length})</h2>{incidents.map(i => <div key={i.id} className="flex" style={{ marginBottom: 6 }}><Pill s="failed">{i.severity}</Pill><span style={{ flex: 1 }}>{i.description}</span><span className="muted">{fmtDT(i.created_at, lang)}</span><button className="btn ghost xs" onClick={() => resolve(i)}>Resolve</button></div>)}</div>}
+    {groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="card"><h2>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')} <Pill s="gray">{vis.length}</Pill>
+      <button className="btn ghost xs right" onClick={() => print(vis.map(t => t.id))}>🖨 labels</button></h2>
+      <table className="t"><thead><tr><th style={{ width: 30 }}></th><th>{tr(lang, 'Time')}</th><th>{tr(lang, 'Patient')}</th><th>Day</th><th>Cycle · order</th><th>Items</th><th>{tr(lang, 'Status')}</th><th></th></tr></thead>
+        <tbody>{vis.map(t => <tr key={t.id}><td><input type="checkbox" checked={sel.includes(t.id)} onChange={() => toggle(t.id)} /></td>
+          <td>{t.scheduled_time ? t.scheduled_time.slice(0, 5) : ''}{days > 1 && <div className="muted">{fmtDate(t.scheduled_date, lang)}</div>}</td>
+          <td><b>{t.hn}</b> {nameOf(t, lang)}{t.partner_en && <div className="muted">partner {t.partner_en}</div>}</td><td>D{t.lab_day}</td>
+          <td><a href={'/cycles/' + t.cycle_id}>{t.cycle_number}</a><div className="muted">{t.physician_order || t.cycle_type}</div></td>
+          <td className="muted">{(t.items_required || []).join(', ')}</td>
+          <td><Pill s={t.effective_status}>{tr(lang, t.effective_status.charAt(0).toUpperCase() + t.effective_status.slice(1))}</Pill>{t.blocked_by_consent.length > 0 && <div className="muted">{t.blocked_by_consent.join(', ')}</div>}{t.failed_reason && <div className="muted">{t.failed_reason}</div>}</td>
+          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{t.status === 'pending' && <>{t.requires_witness ? <a className="btn emerald xs" href={`/lab/witness?task=${t.id}`}>▣ {tr(lang, 'Witness')}</a> : <button className="btn emerald xs" onClick={() => done(t)}>✓ {tr(lang, 'Done')}</button>} <button className="btn ghost xs" onClick={() => fail(t)}>✕</button></>}
+            {t.status === 'done' && <span className="muted">{fmtDT(t.done_at, lang)}</span>}</td></tr>)}</tbody></table></div>; })}
+    {data.tasks.length === 0 && <div className="card muted center" style={{ padding: 40 }}>No lab tasks for this day. Tasks appear when a procedure is scheduled on a cycle.</div>}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

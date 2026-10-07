@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cycles — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const STATUS_ORDER = ['planned','stimulating','triggered','procedure_scheduled','lab_active','transferred','frozen','luteal','outcome_pending','closed','cancelled'];
+
+function NewCycle({ lang, onClose, onCreated, toast }) {
+  const [q, setQ] = useState(''); const [hits, setHits] = useState([]); const [pt, setPt] = useState(null);
+  const [pkgs, setPkgs] = useState([]); const [form, setForm] = useState({ package_id: '', medication_start_date: todayISO(), physician_order: '', partner_id: '' });
+  const [pq, setPq] = useState(''); const [phits, setPhits] = useState([]);
+  useEffect(() => { api('/api/v1/journey/packages').then(setPkgs); }, []);
+  useEffect(() => { if (q.length < 2) return; const t = setTimeout(() => api('/api/v1/journey/patients/search?q=' + encodeURIComponent(q)).then(setHits), 250); return () => clearTimeout(t); }, [q]);
+  useEffect(() => { if (pq.length < 2) return; const t = setTimeout(() => api('/api/v1/journey/patients/search?q=' + encodeURIComponent(pq)).then(setPhits), 250); return () => clearTimeout(t); }, [pq]);
+  const pick = (p) => { setPt(p); setHits([]); setQ(p.hn + ' ' + nameOf(p, lang)); if (p.partner) setForm(f => ({ ...f, partner_id: p.partner.id })); };
+  const create = async () => {
+    try {
+      const r = await api('/api/v1/journey/cycles', { body: { patient_id: pt.id, package_id: form.package_id, medication_start_date: form.medication_start_date || null, physician_order: form.physician_order, partner_id: form.partner_id || null } });
+      onCreated(r);
+    } catch (e) { toast(e.message, true); }
+  };
+  const pkg = pkgs.find(p => p.id === form.package_id);
+  return <Modal title={tr(lang, 'New cycle')} onClose={onClose}>
+    <div className="grid c2">
+      <Field label={tr(lang, 'Patient') + ' (HN / name / phone)'}><input value={q} onChange={e => { setQ(e.target.value); setPt(null); }} placeholder="HN-2026-…" />
+        {hits.length > 0 && !pt && <div className="card" style={{ padding: 6, position: 'absolute', zIndex: 5, width: 340 }}>{hits.map(h => <div key={h.id} style={{ padding: '6px 8px', cursor: 'pointer' }} onClick={() => pick(h)}>
+          <b>{h.hn}</b> {nameOf(h, lang)} <span className="muted">{h.gender} · {h.age}</span>{h.partner && <span className="muted"> · partner {h.partner.name_en}</span>}</div>)}</div>}
+      </Field>
+      <Field label={tr(lang, 'Partner')}>{pt && pt.partner ? <input value={pt.partner.hn + ' ' + pt.partner.name_en} readOnly /> :
+        <input value={pq} onChange={e => setPq(e.target.value)} placeholder="search partner (optional)" />}
+        {phits.length > 0 && <div className="card" style={{ padding: 6, position: 'absolute', zIndex: 5, width: 340 }}>{phits.map(h => <div key={h.id} style={{ padding: '6px 8px', cursor: 'pointer' }} onClick={() => { setForm(f => ({ ...f, partner_id: h.id })); setPq(h.hn + ' ' + nameOf(h, lang)); setPhits([]); }}><b>{h.hn}</b> {nameOf(h, lang)}</div>)}</div>}
+      </Field>
+      <Field label={tr(lang, 'Package')}><select value={form.package_id} onChange={e => setForm({ ...form, package_id: e.target.value })}><option value="">—</option>
+        {pkgs.map(p => <option key={p.id} value={p.id}>{lang === 'th' ? (p.name_th || p.name_en) : p.name_en} ({p.code})</option>)}</select></Field>
+      <Field label={tr(lang, 'Medication start')}><input type="date" value={form.medication_start_date} onChange={e => setForm({ ...form, medication_start_date: e.target.value })} /></Field>
+      <Field label={tr(lang, 'Physician order')}><input value={form.physician_order} onChange={e => setForm({ ...form, physician_order: e.target.value })} placeholder="e.g. D5 ET / Freeze-all PGT-A" /></Field>
+    </div>
+    {pkg && <div className="card" style={{ marginTop: 12, background: 'var(--cream)' }}><div className="flex"><span className="tag">{pkg.cycle_type}</span><span className="tag gold">anchor {pkg.anchor}</span>{pkg.pgt && <span className="tag ruby">PGT</span>}</div>
+      <div className="muted" style={{ marginTop: 8 }}>{(pkg.medication_template || []).length} medication rows · {(pkg.lab_events || []).length} lab events · {(pkg.consents || []).length} consents</div></div>}
+    <div className="flex" style={{ marginTop: 16, justifyContent: 'flex-end' }}><button className="btn ghost" onClick={onClose}>{tr(lang, 'Cancel')}</button>
+      <button className="btn primary" disabled={!pt || !form.package_id} onClick={create}>{tr(lang, 'Create')}</button></div>
+  </Modal>;
+}
+
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [rows, setRows] = useState([]); const [q, setQ] = useState(''); const [status, setStatus] = useState(''); const [active, setActive] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const load = () => api(`/api/v1/journey/cycles?active_only=${active}${status ? '&status=' + status : ''}${q ? '&q=' + encodeURIComponent(q) : ''}`).then(setRows).catch(e => toast(e.message, true));
+  useEffect(() => { load(); }, [q, status, active]);
+  const counts = useMemo(() => rows.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {}), [rows]);
+  return <Shell active="/cycles" lang={lang} setLang={setLang} title={tr(lang, 'Cycles')}
+    actions={<><input className="input" placeholder={tr(lang, 'Search') + ' HN / name / cycle'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 260 }} />
+      <select className="input" value={status} onChange={e => setStatus(e.target.value)}><option value="">{tr(lang, 'All')} status</option>{STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}</select>
+      <label className="flex muted"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> active only</label>
+      <button className="btn ruby" onClick={() => setShowNew(true)}>＋ {tr(lang, 'New cycle')}</button></>}>
+    <div className="grid c4" style={{ marginBottom: 16 }}>
+      <Stat label="Active cycles" value={rows.filter(r => !['closed', 'cancelled'].includes(r.status)).length} ink />
+      <Stat label="Stimulating" value={(counts.stimulating || 0) + (counts.triggered || 0)} />
+      <Stat label="In lab / scheduled" value={(counts.lab_active || 0) + (counts.procedure_scheduled || 0)} />
+      <Stat label="Awaiting outcome" value={(counts.luteal || 0) + (counts.outcome_pending || 0) + (counts.transferred || 0)} />
+    </div>
+    <div className="card"><table className="t"><thead><tr><th>Cycle</th><th>{tr(lang, 'Patient')}</th><th>{tr(lang, 'Package')}</th><th>{tr(lang, 'Medication start')}</th><th>D0</th><th>{tr(lang, 'Status')}</th><th>Lab tasks</th><th>{tr(lang, 'Consents')}</th><th></th></tr></thead>
+      <tbody>{rows.map(r => <tr key={r.id}>
+        <td><a href={'/cycles/' + r.id}><b>{r.cycle_number}</b></a><div className="muted">{r.physician_order || ''}</div></td>
+        <td><b>{r.hn}</b><div>{nameOf(r, lang)} <span className="muted">{r.age}</span></div></td>
+        <td>{r.package_name_en || r.cycle_type}{r.pgt && <span className="tag ruby" style={{ marginLeft: 6 }}>PGT</span>}</td>
+        <td>{fmtDate(r.medication_start_date, lang)}</td><td>{fmtDate(r.d0_date, lang)}</td>
+        <td><Pill s={['closed', 'cancelled'].includes(r.status) ? (r.status === 'cancelled' ? 'failed' : 'gray') : (r.status === 'lab_active' ? 'done' : 'pending')}>{r.status}</Pill></td>
+        <td className="num">{r.pending_tasks}</td><td className="num">{r.pending_consents ? <Pill s="blocked">{r.pending_consents} pending</Pill> : <Pill s="signed">✓</Pill>}</td>
+        <td><a className="btn ghost xs" href={'/cycles/' + r.id}>Open</a></td></tr>)}
+        {rows.length === 0 && <tr><td colSpan="9" className="muted center" style={{ padding: 30 }}>No cycles yet — create one from a package.</td></tr>}</tbody></table></div>
+    {showNew && <NewCycle lang={lang} toast={toast} onClose={() => setShowNew(false)} onCreated={(c) => { location.href = '/cycles/' + c.id; }} />}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

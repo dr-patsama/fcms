@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LIFE by Dr. Pat — Patient app</title>
+<link rel="manifest" href="/portal/manifest.webmanifest"><meta name="theme-color" content="#E0115F"><link rel="apple-touch-icon" href="/brand/logo.png">
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+<style>
+body{background:var(--cream)} .app{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.hdr{background:linear-gradient(135deg,var(--ruby),#A00040);color:#fff;padding:22px 20px 18px;border-radius:0 0 22px 22px}
+.hdr .brand{font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.9}.hdr h1{margin:4px 0 0;font-size:22px}
+.body{padding:16px;flex:1;padding-bottom:84px}.card{margin-bottom:12px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;background:#fff;border-top:1px solid var(--border-soft);display:flex;justify-content:space-around;padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
+.nav button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--gray-500);font-weight:600}.nav button.on{color:var(--ruby)}.nav button span{font-size:20px}
+.dose{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-100)}.dose:last-child{border:0}.dose .t{flex:1}.dose b{display:block}
+.chk{width:34px;height:34px;border-radius:50%;border:2px solid var(--emerald);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--emerald);background:#fff}.chk.on{background:var(--emerald);color:#fff}
+.day{margin-bottom:10px}.day h4{margin:0 0 6px;font-size:13px;color:var(--gray-500);display:flex;gap:8px;align-items:center}.day.today h4{color:var(--ruby)}
+.ev{background:var(--sapphire-muted);color:var(--sapphire-deep);border-radius:6px;padding:6px 10px;font-size:13px;margin-bottom:4px;font-weight:600}.ev.trigger{background:var(--ruby-muted);color:var(--ruby-dark)}
+.photo{width:100%;border-radius:10px;border:1px solid var(--border-soft)}.notif{padding:10px 0;border-bottom:1px solid var(--gray-100)}.notif.unread b::before{content:'● ';color:var(--ruby)}
+.login{padding:30px 20px;text-align:center}.login .logo{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ruby);font-weight:700}
+</style></head><body><div id="root"></div>
+<script type="text/babel">
+const P = '/api/v1/portal';
+const PT = () => localStorage.getItem('fcms_patient_token');
+async function papi(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {}); const tok = PT(); if (tok) headers.Authorization = 'Bearer ' + tok;
+  let body = opts.body; if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+  const r = await fetch(path, { method: opts.method || (body ? 'POST' : 'GET'), headers, body });
+  if (r.status === 401) { localStorage.removeItem('fcms_patient_token'); location.reload(); }
+  if (!r.ok) { let m = r.statusText; try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail || j); } catch (e) {} throw new Error(m); }
+  return (r.headers.get('content-type') || '').includes('json') ? r.json() : r.blob();
+}
+const T = (lang, en, th) => lang === 'th' ? th : en;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/portal/sw.js').catch(() => {});
+
+function Login({ cfg, onDone, lang }) {
+  const [step, setStep] = useState('id'); const [f, setF] = useState({ hn: '', dob: '', phone: '', channel: cfg.otp_channels[0] || 'sms' }); const [acct, setAcct] = useState(null); const [code, setCode] = useState(''); const [err, setErr] = useState(null); const [dev, setDev] = useState(null); const [liffToken, setLiffToken] = useState(null);
+  useEffect(() => {
+    if (!cfg.liff_id || !window.liff) return;
+    liff.init({ liffId: cfg.liff_id }).then(async () => { if (liff.isLoggedIn()) { const t = liff.getIDToken(); setLiffToken(t); try { const r = await papi(P + '/auth/line', { body: { id_token: t } }); if (r.status === 'ok') { localStorage.setItem('fcms_patient_token', r.access_token); onDone(); } else setStep('link'); } catch (e) { setErr(e.message); } } }).catch(e => setErr('LIFF: ' + e.message));
+  }, []);
+  const request = async () => { setErr(null); try { const r = await papi(P + '/auth/otp/request', { body: f }); setAcct(r.account_id); setDev(r.dev_code || null); setStep('otp'); } catch (e) { setErr(e.message); } };
+  const verify = async () => { setErr(null); try { const r = await papi(P + '/auth/otp/verify', { body: { account_id: acct, code } }); localStorage.setItem('fcms_patient_token', r.access_token); onDone(); } catch (e) { setErr(e.message); } };
+  const link = async () => { setErr(null); try { const r = await papi(P + '/auth/line', { body: { id_token: liffToken, hn: f.hn, dob: f.dob, phone: f.phone } }); if (r.status === 'ok') { localStorage.setItem('fcms_patient_token', r.access_token); onDone(); } } catch (e) { setErr(e.message); } };
+  return <div className="login"><div className="logo">LIFE by Dr. Pat</div><h2 style={{ margin: '6px 0 2px', color: 'var(--ink)' }}>{T(lang, 'Your treatment, step by step', 'การรักษาของคุณ ทีละขั้นตอน')}</h2><p className="muted">{T(lang, 'Sign in with your HN and date of birth.', 'เข้าสู่ระบบด้วย HN และวันเกิด')}</p>
+    {cfg.liff_id && window.liff && step === 'id' && <button className="btn emerald block" style={{ marginBottom: 14 }} onClick={() => liff.login()}>LINE Login</button>}
+    {(step === 'id' || step === 'link') && <div className="card" style={{ textAlign: 'left' }}>
+      <Field label="HN"><input value={f.hn} onChange={e => setF({ ...f, hn: e.target.value })} placeholder="HN-2026-00001" /></Field>
+      <Field label={T(lang, 'Date of birth', 'วันเกิด')}><input type="date" value={f.dob} onChange={e => setF({ ...f, dob: e.target.value })} /></Field>
+      {step === 'id' && <Field label={T(lang, 'Send code via', 'ส่งรหัสทาง')}><select value={f.channel} onChange={e => setF({ ...f, channel: e.target.value })}>{cfg.otp_channels.map(c => <option key={c}>{c}</option>)}</select></Field>}
+      {err && <div style={{ color: 'var(--ruby)', marginTop: 8 }}>{err}</div>}
+      <button className="btn ruby block" style={{ marginTop: 14 }} onClick={step === 'link' ? link : request} disabled={!f.hn || !f.dob}>{step === 'link' ? T(lang, 'Link my LINE account', 'เชื่อมบัญชี LINE') : T(lang, 'Send login code', 'ขอรหัสเข้าสู่ระบบ')}</button></div>}
+    {step === 'otp' && <div className="card" style={{ textAlign: 'left' }}><Field label={T(lang, '6-digit code', 'รหัส 6 หลัก')}><input inputMode="numeric" value={code} onChange={e => setCode(e.target.value)} /></Field>
+      {dev && <div className="muted" style={{ marginTop: 6 }}>No messaging channel is configured yet — test code: <b>{dev}</b></div>}{err && <div style={{ color: 'var(--ruby)', marginTop: 8 }}>{err}</div>}
+      <button className="btn ruby block" style={{ marginTop: 14 }} onClick={verify} disabled={code.length < 6}>{T(lang, 'Sign in', 'เข้าสู่ระบบ')}</button></div>}
+    <p className="muted" style={{ fontSize: 12 }}>{cfg.clinic_th} · {cfg.phone}</p></div>;
+}
+
+function Home({ lang, go }) {
+  const [h, setH] = useState(null); const [err, setErr] = useState(null);
+  const load = () => papi(P + '/home').then(setH).catch(e => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const tick = async (d) => { await papi(`${P}/doses/${d.id}/taken`, { body: { undo: !!d.taken_at } }); load(); };
+  if (!h) return <div className="muted">{err || '…'}</div>;
+  const c = h.cycle;
+  return <>
+    {c ? <div className="card ink"><div className="tag gold">{lang === 'th' ? (c.package_name_th || c.package_name_en) : c.package_name_en}</div><h2 style={{ marginTop: 8 }}>{c.cycle_number}</h2>
+      <div className="flex"><span>{T(lang, 'Day', 'วันที่')} <b>{c.day_index ?? '—'}</b></span>{c.lab_day != null && <span>· D{c.lab_day}</span>}<span className="right muted">{c.status}</span></div>
+      {h.trigger_at && <div style={{ marginTop: 8, color: 'var(--gold)' }}>💉 Trigger: <b>{fmtDT(h.trigger_at, lang)}</b></div>}</div>
+      : <div className="card"><b>{T(lang, 'No active cycle', 'ยังไม่มีรอบการรักษาที่กำลังดำเนินอยู่')}</b><div className="muted">{T(lang, 'Your plan will appear here when your doctor publishes it.', 'แผนการรักษาจะแสดงที่นี่เมื่อแพทย์เผยแพร่')}</div></div>}
+    <div className="card"><h2>{T(lang, "Today's medications", 'ยาของวันนี้')} <span className="tag">{fmtDate(h.date, lang)}</span></h2>
+      {h.doses_today.length === 0 && <div className="muted">{T(lang, 'Nothing scheduled today.', 'วันนี้ไม่มียาตามแผน')}</div>}
+      {h.doses_today.map(d => <div key={d.id} className="dose"><div className="t"><b>{lang === 'th' ? (d.drug_th || d.drug_en) : d.drug_en}</b><span className="muted">{d.dose} {d.unit} · {d.route} · {d.slot}</span>{(d.instructions_th || d.instructions_en) && <div className="muted">{lang === 'th' ? (d.instructions_th || d.instructions_en) : d.instructions_en}</div>}</div><button className={'chk' + (d.taken_at ? ' on' : '')} onClick={() => tick(d)}>✓</button></div>)}</div>
+    {h.queue && <div className="card" style={{ borderColor: 'var(--emerald)' }}><h2>{T(lang, 'Queue', 'คิวของคุณ')}</h2><div className="big" style={{ color: 'var(--emerald)' }}>{h.queue.number}</div><div className="muted">{T(lang, `${h.queue.ahead} ahead of you`, `รออีก ${h.queue.ahead} คิว`)}</div></div>}
+    {h.next_appointment && <div className="card"><h2>{T(lang, 'Next visit', 'นัดครั้งถัดไป')}</h2><b>{fmtDate(h.next_appointment.appointment_date, lang)} · {h.next_appointment.appointment_time && h.next_appointment.appointment_time.slice(0, 5)}</b><div className="muted">{h.next_appointment.appointment_type_th || h.next_appointment.appointment_type}</div>
+      {(h.next_appointment.preparation_instructions_th || h.next_appointment.preparation_instructions) && <div style={{ marginTop: 6 }}>{lang === 'th' ? (h.next_appointment.preparation_instructions_th || h.next_appointment.preparation_instructions) : h.next_appointment.preparation_instructions}</div>}</div>}
+    {h.pending_consents > 0 && <div className="card" style={{ borderColor: 'var(--gold)' }} onClick={() => go('consents')}><b>✍ {T(lang, `${h.pending_consents} consent form(s) to sign`, `มีเอกสารยินยอม ${h.pending_consents} ฉบับรอลงนาม`)}</b><div className="muted">{T(lang, 'Tap to review and sign before your visit.', 'แตะเพื่ออ่านและลงนามก่อนนัด')}</div></div>}
+  </>;
+}
+
+function Cycle({ lang }) {
+  const [cycles, setCycles] = useState([]); const [sel, setSel] = useState(null); const [d, setD] = useState(null);
+  useEffect(() => { papi(P + '/cycles').then(cs => { setCycles(cs); if (cs[0]) setSel(cs[0].id); }); }, []);
+  useEffect(() => { if (sel) papi(`${P}/cycles/${sel}`).then(setD); }, [sel]);
+  const tick = async (dose) => { await papi(`${P}/doses/${dose.id}/taken`, { body: { undo: !!dose.taken_at } }); papi(`${P}/cycles/${sel}`).then(setD); };
+  if (!d) return <div className="muted">…</div>;
+  const dates = Object.keys(d.calendar).sort(); const today = todayISO();
+  return <>
+    {cycles.length > 1 && <select className="input" style={{ width: '100%', marginBottom: 10 }} value={sel} onChange={e => setSel(e.target.value)}>{cycles.map(c => <option key={c.id} value={c.id}>{c.cycle_number} · {lang === 'th' ? (c.package_name_th || c.package_name_en) : c.package_name_en}</option>)}</select>}
+    <div className="card"><h2>{T(lang, 'Medication plan', 'แผนการใช้ยา')}</h2>{d.medications.map(m => <div key={m.id} className="muted" style={{ marginBottom: 4 }}><b style={{ color: 'var(--ink)' }}>{lang === 'th' ? (m.drug_th || m.drug_en) : m.drug_en}</b> {m.dose} {m.unit} {m.route} {m.slot} · {T(lang, 'day', 'วันที่')} {m.start_day_index}–{m.end_day_index}</div>)}</div>
+    <div className="card"><h2>{T(lang, 'Calendar', 'ปฏิทินการรักษา')}</h2>
+      {dates.map(dt => { const day = d.calendar[dt]; if (!day.doses.length && !day.events.length && !day.is_procedure) return null; return <div key={dt} className={'day' + (dt === today ? ' today' : '')} id={dt === today ? 'today' : undefined}><h4>{fmtDate(dt, lang)}{day.day_index && <span className="tag">{T(lang, 'day', 'วัน')} {day.day_index}</span>}{day.lab_day != null && <span className="tag ruby">D{day.lab_day}</span>}</h4>
+        {day.events.map((e, i) => <div key={i} className={'ev' + (e.type === 'trigger' ? ' trigger' : '')}>{e.type === 'trigger' ? '💉 ' : '📅 '}{lang === 'th' ? (e.type_th || e.type) : e.type.replace(/_/g, ' ')} {e.time && '· ' + e.time}{(e.instructions_th || e.instructions_en) && <div style={{ fontWeight: 400 }}>{lang === 'th' ? (e.instructions_th || e.instructions_en) : e.instructions_en}</div>}</div>)}
+        {day.doses.map(ds => <div key={ds.id} className="dose"><div className="t"><b>{lang === 'th' ? (ds.drug_th || ds.drug_en) : ds.drug_en}</b><span className="muted">{ds.dose} {ds.unit} · {ds.route} · {ds.slot}</span></div>{dt <= today && <button className={'chk' + (ds.taken_at ? ' on' : '')} onClick={() => tick(ds)}>✓</button>}</div>)}</div>; })}</div>
+    {d.monitoring.length > 0 && <div className="card"><h2>{T(lang, 'Monitoring results', 'ผลการติดตาม')}</h2>{d.monitoring.map(m => <div key={m.id} className="muted" style={{ marginBottom: 6 }}><b style={{ color: 'var(--ink)' }}>{fmtDate(m.calendar_date, lang)}</b> · {T(lang, 'follicles', 'ฟอลลิเคิล')} R {(m.follicles_right || []).join(',')} L {(m.follicles_left || []).join(',')} · {T(lang, 'endometrium', 'เยื่อบุ')} {m.endometrium_mm} mm{m.e2 != null && ` · E2 ${m.e2}`}{m.decision_th || m.decision_en ? <div>{lang === 'th' ? (m.decision_th || m.decision_en) : m.decision_en}</div> : null}</div>)}</div>}
+    {d.outcome && <div className="card"><h2>{T(lang, 'Outcome', 'ผลการรักษา')}</h2>{d.outcome.hcg_positive == null ? <span className="muted">{T(lang, 'Pending', 'รอผล')}</span> : <b>{d.outcome.hcg_positive ? T(lang, 'hCG positive', 'hCG บวก') : T(lang, 'hCG negative', 'hCG ลบ')}</b>}
+      {d.report_available && <div><button className="btn ghost sm" style={{ marginTop: 8 }} onClick={async () => openBlob(await papi(`${P}/reports/${sel}.pdf`))}>📄 {T(lang, 'Cycle report', 'รายงานรอบการรักษา')}</button></div>}</div>}
+  </>;
+}
+
+function Album({ lang }) {
+  const [ph, setPh] = useState([]); const [urls, setUrls] = useState({});
+  useEffect(() => { papi(P + '/album').then(async (ps) => { setPh(ps); const u = {}; for (const p of ps) { try { u[p.id] = URL.createObjectURL(await papi(`${P}/album/${p.id}/file`)); } catch (e) {} } setUrls(u); }); }, []);
+  return <div className="card"><h2>{T(lang, 'Embryo album', 'อัลบั้มตัวอ่อน')}</h2>{ph.length === 0 && <div className="muted">{T(lang, 'Photos appear here when the laboratory releases them.', 'รูปจะแสดงที่นี่เมื่อห้องปฏิบัติการเผยแพร่')}</div>}
+    {ph.map(p => <div key={p.id} style={{ marginBottom: 14 }}>{urls[p.id] && <img className="photo" src={urls[p.id]} />}<div className="muted">D{p.lab_day ?? '-'} · {fmtDate(p.taken_at, lang)} {lang === 'th' ? (p.caption_th || p.caption_en) : p.caption_en}</div></div>)}</div>;
+}
+
+function Results({ lang }) {
+  const [r, setR] = useState(null); useEffect(() => { papi(P + '/results').then(setR); }, []);
+  if (!r) return <div className="muted">…</div>;
+  return <><div className="card"><h2>{T(lang, 'Laboratory results', 'ผลตรวจทางห้องปฏิบัติการ')}</h2>{r.lab.length === 0 && <div className="muted">{T(lang, 'No released results yet.', 'ยังไม่มีผลที่เผยแพร่')}</div>}
+    {r.lab.map((x, i) => <div key={i} className="dose"><div className="t"><b>{lang === 'th' ? (x.name_th || x.name_en) : x.name_en}</b><span className="muted">{fmtDate(x.date, lang)} · {x.reference || ''}</span></div><div><b style={{ color: x.flag && x.flag !== 'N' ? 'var(--ruby)' : 'var(--emerald-dark)' }}>{x.value}</b> <span className="muted">{x.unit}</span></div></div>)}</div>
+    <div className="card"><h2>{T(lang, 'Ultrasound monitoring', 'ผลอัลตราซาวด์')}</h2>{r.monitoring.map(m => <div key={m.id} className="muted" style={{ marginBottom: 6 }}><b style={{ color: 'var(--ink)' }}>{fmtDate(m.calendar_date, lang)}</b> · R {(m.follicles_right || []).join(',')} L {(m.follicles_left || []).join(',')} · {m.endometrium_mm} mm</div>)}{r.monitoring.length === 0 && <div className="muted">—</div>}</div></>;
+}
+
+function Consents({ lang }) {
+  const [cs, setCs] = useState([]); const [open, setOpen] = useState(null); const [sig, setSig] = useState(null); const [err, setErr] = useState(null);
+  const load = () => papi(P + '/consents').then(setCs); useEffect(() => { load(); }, []);
+  const sign = async () => { try { await papi(`${P}/consents/${open.id}/sign`, { body: { signature: sig } }); setOpen(null); setSig(null); load(); } catch (e) { setErr(e.message); } };
+  return <><div className="card"><h2>{T(lang, 'Consent forms', 'เอกสารยินยอม')}</h2>{cs.map(c => <div key={c.id} className="dose"><div className="t"><b>{lang === 'th' ? c.title_th : c.title_en}</b><span className="muted">{c.status === 'signed' ? T(lang, 'Signed ', 'ลงนามแล้ว ') + fmtDT(c.signed_at, lang) : T(lang, 'Waiting for your signature', 'รอลงนาม')}</span></div>
+    {c.can_sign ? <button className="btn ruby xs" onClick={() => setOpen(c)}>{T(lang, 'Read & sign', 'อ่านและลงนาม')}</button> : <button className="btn ghost xs" onClick={async () => openBlob(await papi(`${P}/consents/${c.id}/file`))}>PDF</button>}</div>)}</div>
+    {open && <Modal title={lang === 'th' ? open.title_th : open.title_en} onClose={() => setOpen(null)}><p style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{lang === 'th' ? open.body_th : open.body_en}</p><div className="hr" /><div className="muted">{T(lang, 'Sign below with your finger', 'ลงนามด้วยนิ้วด้านล่าง')}</div><SignaturePad onChange={setSig} />{err && <div style={{ color: 'var(--ruby)' }}>{err}</div>}
+      <button className="btn ruby block" style={{ marginTop: 12 }} disabled={!sig} onClick={sign}>{T(lang, 'I consent and sign', 'ข้าพเจ้ายินยอมและลงนาม')}</button></Modal>}</>;
+}
+
+function Cryo({ lang, cfg }) {
+  const [c, setC] = useState(null); const [inv, setInv] = useState([]); const [qr, setQr] = useState(null);
+  useEffect(() => { papi(P + '/cryo').then(setC); papi(P + '/invoices').then(setInv); }, []);
+  const showQr = async (i) => { setQr({ inv: i, url: URL.createObjectURL(await papi(`${P}/invoices/${i.id}/promptpay.png`)) }); };
+  if (!c) return <div className="muted">…</div>;
+  return <><div className="card"><h2>{T(lang, 'Frozen embryos', 'ตัวอ่อนแช่แข็ง')} <span className="tag">{c.embryos.filter(e => e.status === 'stored').length}</span></h2>{c.embryos.length === 0 && <div className="muted">—</div>}
+    {c.embryos.map(e => <div key={e.cryo_id} className="dose"><div className="t"><b>{e.embryo_code}</b><span className="muted">D{e.day} {e.grade || ''}{e.pgta ? ` · PGT-A ${e.pgta}` : ''} · {T(lang, 'frozen', 'แช่แข็ง')} {fmtDate(e.freeze_date, lang)}</span></div><span className={'pill ' + (e.status === 'stored' ? 'active' : 'gray')}>{e.status}</span></div>)}</div>
+    <div className="card"><h2>{T(lang, 'Storage', 'การฝากเก็บ')}</h2>{c.terms.map(t => <div key={t.id} className="dose"><div className="t"><b>{T(lang, t.content_type, { embryo: 'ตัวอ่อน', oocyte: 'ไข่', sperm: 'น้ำเชื้อ' }[t.content_type])} × {t.device_count}</b><span className="muted">{T(lang, 'paid until', 'ชำระถึง')} {fmtDate(t.paid_until, lang)} ({t.days_left} {T(lang, 'days', 'วัน')})</span></div><span className={'pill ' + t.status}>{t.status}</span></div>)}{c.terms.length === 0 && <div className="muted">—</div>}</div>
+    <div className="card"><h2>{T(lang, 'Invoices', 'ใบแจ้งหนี้')}</h2>{inv.map(i => <div key={i.id} className="dose"><div className="t"><b>{i.number}</b><span className="muted">{fmtDate(i.date, lang)} · {lang === 'th' ? (i.notes_th || i.notes) : i.notes}</span></div><div style={{ textAlign: 'right' }}><b>{i.balance_due > 0 ? i.balance_due.toLocaleString() : '✓'}</b>{i.balance_due > 0 && cfg.promptpay && <div><button className="btn primary xs" onClick={() => showQr(i)}>PromptPay</button></div>}</div></div>)}{inv.length === 0 && <div className="muted">—</div>}</div>
+    {qr && <Modal title={`PromptPay · ${qr.inv.number}`} onClose={() => setQr(null)}><div className="center"><img src={qr.url} style={{ width: 240 }} /><div className="big" style={{ fontSize: 28 }}>{qr.inv.balance_due.toLocaleString()} THB</div><div className="muted">{T(lang, 'Scan with your banking app. The clinic confirms your payment and your receipt appears here.', 'สแกนด้วยแอปธนาคาร คลินิกจะยืนยันการชำระและใบเสร็จจะแสดงที่นี่')}</div></div></Modal>}</>;
+}
+
+function Notifs({ lang }) {
+  const [n, setN] = useState([]); const load = () => papi(P + '/notifications').then(setN); useEffect(() => { load(); }, []);
+  const read = async (x) => { if (!x.read_at) { await papi(`${P}/notifications/${x.id}/read`, { body: {} }); load(); } };
+  return <div className="card"><h2>{T(lang, 'Notifications', 'การแจ้งเตือน')}</h2>{n.map(x => <div key={x.id} className={'notif' + (x.read_at ? '' : ' unread')} onClick={() => read(x)}><b>{lang === 'th' ? x.title_th : x.title_en}</b><div>{lang === 'th' ? x.body_th : x.body_en}</div><div className="muted">{fmtDT(x.sent_at, lang)}</div></div>)}{n.length === 0 && <div className="muted">—</div>}</div>;
+}
+
+function More({ lang, setLang, me, cfg }) {
+  const [edu, setEdu] = useState([]); const [appts, setAppts] = useState(null); const [req, setReq] = useState({ date: '', time: '', appointment_type: 'follow_up', note: '' }); const [msg, setMsg] = useState(null);
+  useEffect(() => { papi(P + '/education').then(setEdu); papi(P + '/appointments').then(setAppts); }, []);
+  const book = async () => { try { await papi(P + '/booking-requests', { body: req }); setMsg(T(lang, 'Request sent — the clinic will confirm.', 'ส่งคำขอแล้ว คลินิกจะยืนยันให้')); papi(P + '/appointments').then(setAppts); } catch (e) { setMsg(e.message); } };
+  const setL = async (l) => { setLang(l); await papi(P + '/me/language', { body: { language: l } }); };
+  return <>
+    <div className="card"><h2>{me.name_th || me.name_en} <span className="tag">{me.hn}</span></h2>{me.partner && <div className="muted">{T(lang, 'Partner', 'คู่สมรส')}: {lang === 'th' ? me.partner.name_th : me.partner.name_en}</div>}
+      <div className="flex" style={{ marginTop: 8 }}><span className="muted">{T(lang, 'Language', 'ภาษา')}</span><div className="lang"><button className={lang === 'th' ? 'on' : ''} onClick={() => setL('th')}>ไทย</button><button className={lang === 'en' ? 'on' : ''} onClick={() => setL('en')}>EN</button></div>
+        <button className="btn ghost xs right" onClick={() => { localStorage.removeItem('fcms_patient_token'); location.reload(); }}>{T(lang, 'Sign out', 'ออกจากระบบ')}</button></div></div>
+    <div className="card"><h2>{T(lang, 'Appointments', 'นัดหมาย')}</h2>{appts && appts.appointments.filter(a => a.appointment_date >= todayISO()).map(a => <div key={a.id} className="dose"><div className="t"><b>{fmtDate(a.appointment_date, lang)} {a.appointment_time && a.appointment_time.slice(0, 5)}</b><span className="muted">{a.appointment_type_th || a.appointment_type}</span></div><span className="pill gray">{a.status}</span></div>)}
+      {appts && appts.requests.filter(r => r.status === 'requested').map(r => <div key={r.id} className="dose"><div className="t"><b>{fmtDate(r.requested_date, lang)} {r.requested_time && r.requested_time.slice(0, 5)}</b><span className="muted">{T(lang, 'requested — awaiting confirmation', 'รอคลินิกยืนยัน')}</span></div><span className="pill blocked">requested</span></div>)}
+      <div className="hr" /><b>{T(lang, 'Request an appointment', 'ขอนัดหมาย')}</b><div className="row" style={{ marginTop: 6 }}><Field label={T(lang, 'Date', 'วันที่')}><input type="date" value={req.date} onChange={e => setReq({ ...req, date: e.target.value })} /></Field><Field label={T(lang, 'Time', 'เวลา')}><input type="time" value={req.time} onChange={e => setReq({ ...req, time: e.target.value })} /></Field></div>
+      <Field label={T(lang, 'Type', 'ประเภท')}><select value={req.appointment_type} onChange={e => setReq({ ...req, appointment_type: e.target.value })}>{[['follow_up', 'Follow-up', 'ติดตามผล'], ['consultation', 'Consultation', 'ปรึกษาแพทย์'], ['ultrasound', 'Ultrasound', 'อัลตราซาวด์'], ['blood_test', 'Blood test', 'เจาะเลือด'], ['virtual_consultation', 'Virtual consultation', 'ปรึกษาออนไลน์']].map(([v, en, th]) => <option key={v} value={v}>{T(lang, en, th)}</option>)}</select></Field>
+      <Field label={T(lang, 'Note', 'หมายเหตุ')}><input value={req.note} onChange={e => setReq({ ...req, note: e.target.value })} /></Field><button className="btn primary block" style={{ marginTop: 10 }} disabled={!req.date} onClick={book}>{T(lang, 'Send request', 'ส่งคำขอ')}</button>{msg && <div className="muted" style={{ marginTop: 6 }}>{msg}</div>}</div>
+    <div className="card"><h2>{T(lang, 'Learn', 'ความรู้')}</h2>{edu.map(e => <a key={e.id} href={e.url} target="_blank" className="dose" style={{ display: 'flex' }}><div className="t"><b style={{ color: 'var(--ink)' }}>{lang === 'th' ? e.title_th : e.title_en}</b><span className="tag" style={{ fontSize: 9.5 }}>{e.tag}</span></div><span>›</span></a>)}</div>
+    <div className="muted center" style={{ fontSize: 12 }}>{cfg.clinic_th} · {cfg.phone}</div>
+  </>;
+}
+
+function App() {
+  const [cfg, setCfg] = useState(null); const [me, setMe] = useState(null); const [tab, setTab] = useState('home'); const [lang, setLangRaw] = useState(localStorage.getItem('fcms_patient_lang') || 'th');
+  const setLang = (l) => { localStorage.setItem('fcms_patient_lang', l); setLangRaw(l); };
+  useEffect(() => { papi(P + '/config').then(c => { setCfg(c); if (c.liff_id) { const s = document.createElement('script'); s.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js'; document.head.appendChild(s); } }); }, []);
+  const loadMe = () => papi(P + '/me').then(m => { setMe(m); setLang(m.language || 'th'); }).catch(() => setMe(false));
+  useEffect(() => { if (cfg) { if (PT()) loadMe(); else setMe(false); } }, [cfg]);
+  if (!cfg || me === null) return <div className="app"><div className="muted center" style={{ padding: 40 }}>…</div></div>;
+  if (!me) return <div className="app"><Login cfg={cfg} lang={lang} onDone={loadMe} /></div>;
+  const tabs = [['home', '⌂', 'Home', 'หน้าหลัก'], ['cycle', '◎', 'Cycle', 'การรักษา'], ['album', '✦', 'Album', 'อัลบั้ม'], ['results', '▤', 'Results', 'ผลตรวจ'], ['consents', '✍', 'Consent', 'ยินยอม'], ['cryo', '❄', 'Cryo', 'แช่แข็ง'], ['notifs', '🔔', 'Alerts', 'แจ้งเตือน'], ['more', '☰', 'More', 'เพิ่มเติม']];
+  const View = { home: Home, cycle: Cycle, album: Album, results: Results, consents: Consents, cryo: Cryo, notifs: Notifs, more: More }[tab];
+  return <div className="app"><div className="hdr"><div className="brand">LIFE by Dr. Pat</div><h1>{T(lang, `Hello, ${me.nickname || me.name_en.split(' ')[0]}`, `สวัสดีคุณ${me.nickname || (me.name_th || '').split(' ')[0]}`)}</h1></div>
+    <div className="body"><View lang={lang} setLang={setLang} me={me} cfg={cfg} go={setTab} /></div>
+    <div className="nav">{tabs.map(([k, ic, en, th]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}><span>{ic}</span>{T(lang, en, th)}</button>)}</div></div>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

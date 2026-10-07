@@ -52,6 +52,9 @@ fcms/
 ├── module4/                # Pharmacy: Stock, Prescriptions, Dispensing, Labels
 ├── module5/                # Medical Supply: Catalogue, Stock, Requisitions, Usage
 ├── module6/                # CRM: Appointments, Virtual Consultation, Reminders, Scheduling
+├── module7/                # Accounting
+├── module10/               # Cycle Plan / Timeline Generator (embedded)
+├── journey/                # Journey layer: packages → cycle spine → lab to-do → witnessing → patient app → cryo billing → KPIs (see journey/README.md)
 └── seed_admin.py           # One-time admin seeding script
 ```
 
@@ -147,7 +150,17 @@ Label printing: Pharmacy labels are **80×50mm**; lab tube labels are **40×20mm
 | 7 — Accounting (invoices, receipts, expenses, WHT, P&L/AR) | ✅ Done |
 | 10 — Cycle Plan / Timeline Generator (embedded upstream app, DB-backed, patient-linked) | ✅ Done (v1) |
 | Live boards — OPD `/board/opd` · Embryology Lab `/board/embryo` (auto-update via SSE, EN/TH) | ✅ Done |
-| 8, 9, 11–15 — see ROADMAP.md | ⬜ Planned |
+| Journey layer (`journey/`) — packages, cycle spine on `treatment_cycles`, stimulation chart, lab to-do + QR labels, electronic witnessing, Day0–D7 observation, consents e-sign, outcome + report PDF, cryo storage ↔ invoices, patient app (`/portal`, LINE Login/OTP), notifications (LINE/SMS/e-mail/WhatsApp), Google Calendar mirror, KPIs | ✅ Done (v1, 2026-10-07) |
+| 8, 9, 11, 15 (rest) — see ROADMAP.md | ⬜ Planned |
+
+## Journey layer (Binflux-Infans-style flow)
+Pages: `/cycles`, `/cycles/{id}`, `/lab/todo`, `/lab/witness`, `/desk`, `/admin/packages`, `/insight`, `/portal` (patient PWA).
+APIs: `/api/v1/journey/*` (staff), `/api/v1/portal/*` (patients). Migration `j1_001` chains after `m10_001`.
+Rules: a package drives all lanes · every handoff is a `cycle_events` row with isolated handlers · lab tasks are blocked until
+required consents are signed · witness = all scanned items resolve to the same cycle (partner allowed for sperm items) ·
+external channels are optional and report "skipped" when not configured. `.env` keys in `journey/README.md`.
+Test: `PYTHONPATH=. python scripts/e2e_journey.py` (70 checks). Daily job: `POST /api/v1/journey/jobs/daily`.
+Journey-layer models use `UUID(as_uuid=False)` (string ids). Module 1/2 ids come back as `uuid.UUID` — compare with `str()`.
 
 ## Live boards
 `/board/opd` and `/board/embryo` open an EventSource on `/api/v1/dashboard/{board}/stream?token=<jwt>`.

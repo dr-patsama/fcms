@@ -1,6 +1,6 @@
 # FCMS Roadmap — Seamless Patient Care (v2)
 
-Life by Dr. Pat · updated 2026-09-06
+Life by Dr. Pat · updated 2026-10-07
 
 Goal: one patient record flows uninterrupted from first contact → registration → EMR →
 treatment plan → cycle plan → self-administered injections (patient app) → ultrasound /
@@ -101,15 +101,20 @@ employer, embassy letter), Thai/EN, signed PDF, QR verify.
 - Multi-branch flag on all clinical tables from day one.
 
 ## 4. Build order (each = models → schemas → routes → frontend → migration → push)
-1. M1-ext Treatment/Cycle Plan   (unlocks everything else)
-2. M12 Operating Room
-3. M13 Patient App (LINE Mini App first)
-4. M14 Billing extension
-5. M10 Calculators + Questionnaires
-6. M11 Medical Certificate
-7. M8 Marketing Center
-8. M15 Insight & Recommendation
-9. M9 Webmaster
+1. ✅ M1-ext Treatment/Cycle Plan → shipped as the **Journey layer** (`journey/`, 2026-10-07): packages, cycle spine on
+   `treatment_cycles`, stimulation chart, monitoring, trigger, procedure scheduling (OR appointment + D0–D7 + lab to-do),
+   electronic witnessing with QR labels, Day0–D7 observation, consents e-sign, outcome + cycle report, event bus.
+2. ✅ M13 Patient App v1 → `/portal` (PWA + LINE Login/OTP): doses with "taken", calendar, trigger, queue, results, album,
+   consents, cryo & PromptPay, notifications, booking requests. Native app not planned.
+3. ✅ M14 (part) → cryo storage terms ↔ Module 7 invoices/payments, renewal reminders. Remaining: packages/deposits/instalments, e-Claim, PEAK export.
+4. ✅ M15 (part) → `/insight`: Vienna/Maribor indicator set + operational KPIs, monthly series, Excel. Remaining: recommendations.
+5. ✅ Google Calendar mirror of appointments (service account) — `journey/services/calendar_sync.py`.
+6. M12 Operating Room — scheduling lane exists (procedure appointments); OR checklists, anaesthesia record, consumable capture still to build.
+7. M10 Calculators + Questionnaires
+8. M11 Medical Certificate
+9. M8 Marketing Center
+10. M9 Webmaster
+Adapted from the Binflux Infans study: see project docs `binflux-infans-study.md` and `fcms-flow-adaptation-spec.md`.
 
 ## 5. Standing decisions (unchanged)
 No AI chatbot · "virtual consultation" not "telemedicine" · bilingual EN/TH everywhere ·

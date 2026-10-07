@@ -229,6 +229,24 @@ class TreatmentCycle(Base):
     notes           = Column(Text)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
+    # ── Journey layer (j1_001): the cycle as the spine of the patient journey ──
+    package_id             = Column(UUID, ForeignKey("treatment_packages.id"))
+    status                 = Column(String(30), default="planned")   # planned | stimulating | triggered | procedure_scheduled | lab_active | transferred | frozen | luteal | outcome_pending | closed | cancelled
+    medication_start_date  = Column(Date)                             # day_index 1
+    d0_date                = Column(Date)                             # OPU / insemination / IUI / ET-reference day
+    trigger_at             = Column(DateTime(timezone=True))
+    planned_et_day         = Column(Integer)                          # 3 | 5 | null (freeze-all)
+    pgt                    = Column(Boolean, default=False)
+    freeze_all             = Column(Boolean, default=False)
+    registry_report_status = Column(String(20), default="not_required")  # not_required | pending | reported
+    timeline_id            = Column(UUID, ForeignKey("cycle_timelines.id"))
+    physician_order        = Column(String(200))                      # free text shown on the lab board, e.g. "D5 ET"
+    plan_published_at      = Column(DateTime(timezone=True))
+    closed_at              = Column(DateTime(timezone=True))
+    closure_reason         = Column(String(200))
+    created_by             = Column(UUID, ForeignKey("users.id"))
+    updated_at             = Column(DateTime(timezone=True), onupdate=func.now())
+
     oocyte_retrievals = relationship("OocyteRetrieval", back_populates="cycle")
     embryos           = relationship("Embryo",           back_populates="cycle")
 

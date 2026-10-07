@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Witness — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script src="/journey/vendor/jsQR.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+<style>body{background:#1b1420;color:#fff}.main{padding:18px}.topbar h1{color:#fff}.btn.ghost{color:#fff;border-color:rgba(255,255,255,.45)}.modal .btn.ghost{color:var(--sapphire-deep);border-color:var(--border-soft)}.modal{color:var(--gray-900)}.modal .muted{color:var(--gray-500)}.card{background:#241a26;border-color:#3a2b3a;color:#fff}.card h2{color:#fff}.muted{color:#c9b9c3}.t td{border-color:#3a2b3a}.t tr:hover td{background:#2b202d}
+.input,label.f input,label.f select{background:#2b202d;color:#fff;border-color:#4a3a4a}.scanbox{font-size:22px;padding:14px 16px;width:100%;letter-spacing:.04em}.item{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:8px 14px;font-weight:700;border:2px solid rgba(255,255,255,.3);margin:4px}
+.item.ok{background:var(--emerald);border-color:var(--emerald)}.beep{position:fixed;inset:0;pointer-events:none}</style>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const J = '/api/v1/journey';
+const ITEM_TH = { wristband: 'สายรัดข้อมือ', opu_tube: 'หลอดเก็บไข่', oocyte_dish: 'จานไข่', culture_dish: 'จานเลี้ยง', sperm_tube: 'หลอดน้ำเชื้อ', prep_tube: 'น้ำเชื้อเตรียม', cryo_device: 'อุปกรณ์แช่แข็ง', warming_dish: 'จานละลาย', biopsy_tube: 'หลอดชิ้นเนื้อ', et_dish: 'จานย้ายตัวอ่อน' };
+
+function useCamera(onCode, active) {
+  const videoRef = useRef(null); const [err, setErr] = useState(null); const [supported, setSupported] = useState(true);
+  useEffect(() => {
+    if (!active) return; let stream, raf, det, stop = false;
+    (async () => {
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      catch (e) { setErr('Camera unavailable — use a USB/Bluetooth scanner or type the code.'); setSupported(false); return; }
+      if ('BarcodeDetector' in window) { try { det = new BarcodeDetector({ formats: ['qr_code', 'code_128', 'data_matrix'] }); } catch (e) { det = null; } }
+      const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true }); let last = '', lastT = 0;
+      const tick = async () => {
+        if (stop) return; const v = videoRef.current; if (v && v.readyState >= 2) {
+          let code = null;
+          if (det) { try { const r = await det.detect(v); if (r.length) code = r[0].rawValue; } catch (e) {} }
+          else { canvas.width = v.videoWidth; canvas.height = v.videoHeight; ctx.drawImage(v, 0, 0); const img = ctx.getImageData(0, 0, canvas.width, canvas.height); const r = jsQR(img.data, img.width, img.height); if (r) code = r.data; }
+          if (code && (code !== last || Date.now() - lastT > 2500)) { last = code; lastT = Date.now(); onCode(code); }
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+    })();
+    return () => { stop = true; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(t => t.stop()); };
+  }, [active]);
+  return { videoRef, err, supported };
+}
+
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const params = new URLSearchParams(location.search);
+  const [tasks, setTasks] = useState([]); const [task, setTask] = useState(null); const [session, setSession] = useState(null); const [result, setResult] = useState(null); const [code, setCode] = useState(''); const [manual, setManual] = useState(null); const [record, setRecord] = useState([]);
+  const loadTasks = () => api(`${J}/lab/tasks?on=${todayISO()}&days=2`).then(d => { const w = d.tasks.filter(t => t.requires_witness && t.status === 'pending'); setTasks(w); const want = params.get('task'); if (want && !task) { const t = w.find(x => x.id === want); if (t) setTask(t); else api(`${J}/lab/tasks/${want}`).then(setTask).catch(() => {}); } }).catch(e => toast(e.message, true));
+  useEffect(() => { loadTasks(); }, []);
+  useEffect(() => { if (task) api(`${J}/cycles/${task.cycle_id}/scan-record`).then(setRecord); }, [task, result]);
+  const start = async () => { try { const s = await api(`${J}/lab/tasks/${task.id}/witness/start`, { body: { device: 'tablet' } }); setSession(s); setResult(null); } catch (e) { toast(e.message, true); } };
+  const submit = async (payload) => {
+    if (!session || !payload) return;
+    try { const r = await api(`${J}/witness/${session.id}/scan`, { body: { payload } }); setSession(r.session); if (r.status === 'match' || r.status === 'mismatch') { setResult(r); if (navigator.vibrate) navigator.vibrate(r.status === 'match' ? 120 : [200, 100, 200, 100, 400]); } else toast(r.message); }
+    catch (e) { toast(e.message, true); }
+    setCode('');
+  };
+  const { videoRef, err } = useCamera(submit, !!session && !result);
+  const doManual = async () => { try { const r = await api(`${J}/lab/tasks/${task.id}/witness/manual`, { body: manual }); setResult({ status: 'match', message: 'Manual double-witness recorded', session: r.session }); setManual(null); } catch (e) { toast(e.message, true); } };
+  const reset = () => { setSession(null); setResult(null); setTask(null); loadTasks(); history.replaceState(null, '', '/lab/witness'); };
+  const scanned = session ? (session.items_scanned || []) : [];
+  return <Shell active="/lab/witness" lang={lang} setLang={setLang} title={tr(lang, 'Witness')} actions={task && <button className="btn ghost sm" onClick={reset}>← tasks</button>}>
+    {!task && <div className="card"><h2>Steps needing a witness today <Pill s="gray">{tasks.length}</Pill></h2>
+      <table className="t"><thead><tr><th>{tr(lang, 'Time')}</th><th>{tr(lang, 'Patient')}</th><th>Step</th><th>Items</th><th></th></tr></thead>
+        <tbody>{tasks.map(t => <tr key={t.id}><td>{t.scheduled_time ? t.scheduled_time.slice(0, 5) : ''}</td><td><b>{t.hn}</b> {nameOf(t, lang)}</td><td>D{t.lab_day} {lang === 'th' ? (t.title_th || t.title_en) : t.title_en}</td><td className="muted">{(t.items_required || []).join(', ')}</td>
+          <td style={{ textAlign: 'right' }}>{t.effective_status === 'blocked' ? <Pill s="blocked">consent</Pill> : <button className="btn emerald sm" onClick={() => setTask(t)}>Select</button>}</td></tr>)}
+          {tasks.length === 0 && <tr><td colSpan="5" className="muted center" style={{ padding: 30 }}>Nothing to witness right now.</td></tr>}</tbody></table></div>}
+    {task && <div className="grid c2">
+      <div>
+        <div className="card"><h2>{lang === 'th' ? (task.title_th || task.title_en) : task.title_en} <span className="tag gold">D{task.lab_day}</span></h2>
+          <div className="kv"><div>{tr(lang, 'Patient')}</div><div><b>{task.hn}</b> {nameOf(task, lang)} · {task.dob}</div><div>{tr(lang, 'Partner')}</div><div>{task.partner_hn || '—'} {task.partner_en || ''}</div>
+            <div>Cycle</div><div>{task.cycle_number} · {task.cycle_type}</div><div>Order</div><div>{task.physician_order || '—'}</div>
+            <div>Errors</div><div>{record.filter(r => r.result === 'mismatch').length}</div></div>
+          <div className="hr" style={{ background: '#3a2b3a' }} />
+          <div>{(task.items_required || []).map(it => <span key={it} className={'item' + (scanned.includes(it) ? ' ok' : '')}>{scanned.includes(it) ? '✓' : '○'} {lang === 'th' ? (ITEM_TH[it] || it) : it.replace(/_/g, ' ')}</span>)}</div>
+          {!session && !result && <button className="btn emerald block" style={{ marginTop: 14, padding: 14, fontSize: 16 }} onClick={start}>▣ {tr(lang, 'Start witness')}</button>}
+          {session && !result && <div style={{ marginTop: 14 }}><input className="input scanbox" autoFocus placeholder="Scan label (USB scanner) or type LBL-… / HN:…" value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(code.trim()); }} />
+            <div className="muted" style={{ marginTop: 6 }}>Scanner acts as a keyboard — each scan submits on Enter. Camera scanning is active on the right.</div></div>}
+          <div className="flex" style={{ marginTop: 14 }}><button className="btn ghost sm" onClick={() => setManual({ second_email: '', second_password: '', note: '' })}>{tr(lang, 'Manual double-witness')}</button></div>
+        </div>
+        <div className="card"><h2>{tr(lang, 'Scan record')}</h2>{record.slice().reverse().map(r => <div key={r.id} className="flex" style={{ marginBottom: 4 }}><Pill s={r.result}>{r.result}</Pill><span>D{r.lab_day} {r.task_key}</span><span className="muted">{r.witness} · {fmtDT(r.started_at, lang)}</span></div>)}</div>
+      </div>
+      <div>
+        {result ? <div className={'witness-screen ' + result.status}><div className="big">{result.status === 'match' ? '✓ MATCH' : '✕ MISMATCH'}</div><div style={{ fontSize: 18, marginTop: 8 }}>{result.message}</div>
+          {result.status === 'mismatch' && <div style={{ marginTop: 10, fontSize: 14 }}>Stop. Do not proceed. Incident recorded — a supervisor must resolve it on the Lab To-Do page.</div>}
+          <div className="flex" style={{ marginTop: 24 }}>{result.status === 'mismatch' && <button className="btn gold" onClick={start}>Retry scan</button>}<button className="btn ghost" style={{ color: '#fff', borderColor: '#fff' }} onClick={reset}>Next step</button></div></div>
+          : <div className="card center">{session ? <><video ref={videoRef} className="cam" muted playsInline />{err && <div className="muted" style={{ marginTop: 8 }}>{err}</div>}</> : <div className="muted" style={{ padding: 40 }}>Press <b>Start witness</b>, then scan every item listed. All items must belong to this cycle (sperm items may be the partner's).</div>}</div>}
+      </div>
+    </div>}
+    {manual && <Modal title={tr(lang, 'Manual double-witness')} onClose={() => setManual(null)}>
+      <p className="muted" style={{ color: '#555' }}>A second staff member confirms identity by logging in here. Both names are recorded on the step.</p>
+      <div className="grid c2"><Field label="Second witness e-mail"><input value={manual.second_email} onChange={e => setManual({ ...manual, second_email: e.target.value })} /></Field><Field label="Password"><input type="password" value={manual.second_password} onChange={e => setManual({ ...manual, second_password: e.target.value })} /></Field></div>
+      <Field label="Note"><input value={manual.note} onChange={e => setManual({ ...manual, note: e.target.value })} /></Field>
+      <div className="flex" style={{ marginTop: 12, justifyContent: 'flex-end' }}><button className="btn primary" onClick={doManual}>Confirm</button></div></Modal>}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

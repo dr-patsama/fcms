@@ -1,0 +1,11 @@
+{
+  "name": "LIFE by Dr. Pat — Patient app",
+  "short_name": "LIFE by Dr. Pat",
+  "start_url": "/portal",
+  "scope": "/portal",
+  "display": "standalone",
+  "background_color": "#FBF8F3",
+  "theme_color": "#E0115F",
+  "lang": "th",
+  "icons": [{ "src": "/brand/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

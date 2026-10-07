@@ -18,14 +18,15 @@ Comprehensive clinic management platform for the Thai healthcare market.
 |---|--------|--------|
 | 1 | EMR (Auth, RBAC, Patients, Visits, SOAP, ICD-10) | ✅ Done |
 | 2 | Lab Management (General / Embryology / Andrology) | ✅ Done |
-| 3 | Ultrasound (GE Voluson Swift / DICOM) | ⬜ Planned |
-| 4 | Pharmacy | ⬜ Planned |
-| 5 | Medical Supplies | ⬜ Planned |
-| 6 | CRM + Telemedicine + Booking | ⬜ Planned |
-| 7 | Accounting | ⬜ Planned |
+| 3 | Ultrasound (GE Voluson Swift / DICOM) | ✅ Done |
+| 4 | Pharmacy | ✅ Done |
+| 5 | Medical Supplies | ✅ Done |
+| 6 | CRM + Virtual Consultation + Booking | ✅ Done |
+| 7 | Accounting | ✅ Done |
 | 8 | Social Media Center | ⬜ Planned |
 | 9 | Webmaster | ⬜ Planned |
-| 10 | Reproductive Calculators + Treatment Timeline | ⬜ Planned |
+| 10 | Reproductive Calculators + Treatment Timeline | ✅ Timeline (v1) · calculators planned |
+| — | **Journey layer** — packages · cycle spine · lab to-do + QR labels · electronic witnessing · Day0–D7 · consents e-sign · outcome report · cryo ↔ billing · patient app (LINE/PWA) · notifications · Google Calendar · KPIs | ✅ Done (v1) — see `journey/README.md` |
 | 11 | Login Hierarchy & RBAC | ✅ Done |
 | 12 | Operating Room Management | ⬜ Planned |
 

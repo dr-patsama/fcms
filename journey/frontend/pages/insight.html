@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insight — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const J = '/api/v1/journey';
+const LABELS = {
+  oocyte_yield_per_follicle_pct: 'Oocyte yield per follicle', mii_rate_pct: 'MII rate', icsi_normal_fertilisation_rate_pct: 'ICSI normal fertilisation', icsi_damage_rate_pct: 'ICSI damage rate',
+  ivf_normal_fertilisation_rate_pct: 'IVF normal fertilisation', ivf_polyspermy_rate_pct: 'IVF polyspermy', one_pn_rate_pct: '1PN rate', day3_development_rate_pct: 'Day-3 development (≥6 cells)',
+  blastocyst_development_rate_pct: 'Blastocyst development', good_blastocyst_rate_pct: 'Good blastocyst', blastocyst_cryosurvival_rate_pct: 'Cryosurvival', implantation_rate_pct: 'Implantation rate',
+  cycles_started: 'Cycles started', cancellation_before_opu_rate_pct: 'Cancellation before OPU', ohss_moderate_severe_rate_pct: 'OHSS moderate/severe', opu_complication_rate_pct: 'OPU complications',
+  hcg_positive_rate_per_et_pct: 'hCG positive / ET', clinical_pregnancy_rate_per_et_pct: 'Clinical pregnancy / ET', multiple_pregnancy_rate_pct: 'Multiple pregnancy', miscarriage_rate_pct: 'Miscarriage',
+  ectopic_rate_pct: 'Ectopic', ongoing_pregnancy_rate_per_et_pct: 'Ongoing pregnancy / ET', live_birth_rate_per_et_pct: 'Live birth / ET', live_birth_rate_per_started_cycle_pct: 'Live birth / started cycle',
+  steps_electronically_witnessed_pct: 'Steps electronically witnessed', manual_witness_count: 'Manual double-witness', witness_mismatches: 'Witness mismatches', consents_signed_in_app: 'Consents signed in app', medication_adherence_pct: 'Medication adherence (ticked doses)',
+};
+function Section({ title, data, tag }) {
+  const entries = Object.entries(data).filter(([k]) => k !== 'counts');
+  return <div className="card"><h2>{title} <span className="tag">{tag}</span></h2><div className="grid c4">{entries.map(([k, v]) => <div key={k} className="stat" style={{ border: '1px solid var(--border-soft)', borderRadius: 6 }}><div className="label">{LABELS[k] || k}</div><b>{v == null ? '—' : (k.endsWith('_pct') ? v + '%' : v)}</b></div>)}</div>
+    <div className="muted" style={{ marginTop: 10 }}>{Object.entries(data.counts || {}).map(([k, v]) => `${k}=${v}`).join(' · ')}</div></div>;
+}
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [range, setRange] = useState({ start: addDays(todayISO(), -365), end: todayISO() }); const [k, setK] = useState(null); const [series, setSeries] = useState([]);
+  const load = () => Promise.all([api(`${J}/kpi?start=${range.start}&end=${range.end}`), api(`${J}/kpi/monthly?months=12`)]).then(([a, b]) => { setK(a); setSeries(b); }).catch(e => toast(e.message, true));
+  useEffect(() => { load(); }, [range.start, range.end]);
+  const exportX = async () => openBlob(await api(`${J}/kpi/export.xlsx?start=${range.start}&end=${range.end}`));
+  return <Shell active="/insight" lang={lang} setLang={setLang} title={tr(lang, 'Insight')}
+    actions={<><input className="input" type="date" value={range.start} onChange={e => setRange({ ...range, start: e.target.value })} /><span className="muted">→</span><input className="input" type="date" value={range.end} onChange={e => setRange({ ...range, end: e.target.value })} /><button className="btn primary sm" onClick={exportX}>⬇ {tr(lang, 'Export Excel')}</button></>}>
+    {k && <>
+      <div className="grid c3" style={{ marginBottom: 14 }}>
+        <div className="card ink"><h2>Clinical pregnancy / ET</h2><div className="big">{k.clinical.clinical_pregnancy_rate_per_et_pct ?? '—'}{k.clinical.clinical_pregnancy_rate_per_et_pct != null && '%'}</div><Spark data={series.map(s => s.clinical_pregnancy_rate_per_et_pct)} color="#C9A24B" max={100} /><div className="muted">last 12 months</div></div>
+        <div className="card"><h2>ICSI normal fertilisation</h2><div className="big" style={{ color: 'var(--sapphire-deep)' }}>{k.laboratory.icsi_normal_fertilisation_rate_pct ?? '—'}{k.laboratory.icsi_normal_fertilisation_rate_pct != null && '%'}</div><Spark data={series.map(s => s.icsi_normal_fertilisation_rate_pct)} max={100} /></div>
+        <div className="card"><h2>Blastocyst development</h2><div className="big" style={{ color: 'var(--emerald)' }}>{k.laboratory.blastocyst_development_rate_pct ?? '—'}{k.laboratory.blastocyst_development_rate_pct != null && '%'}</div><Spark data={series.map(s => s.blastocyst_development_rate_pct)} color="#009473" max={100} /></div>
+      </div>
+      <Section title={tr(lang, 'Laboratory')} data={k.laboratory} tag="Vienna consensus" />
+      <Section title={tr(lang, 'Clinical')} data={k.clinical} tag="Maribor consensus" />
+      <Section title={tr(lang, 'Operational')} data={k.operational} tag="FCMS" />
+      <div className="card"><h2>Monthly</h2><table className="t"><thead><tr><th>Month</th><th>Cycles started</th><th>OPUs</th><th>ET cycles</th><th>CPR / ET</th><th>ICSI fert.</th><th>Blast. dev.</th></tr></thead>
+        <tbody>{series.map(s => <tr key={s.month}><td>{s.month}</td><td className="num">{s.cycles_started}</td><td className="num">{s.opus}</td><td className="num">{s.et_cycles}</td><td className="num">{s.clinical_pregnancy_rate_per_et_pct ?? '—'}</td><td className="num">{s.icsi_normal_fertilisation_rate_pct ?? '—'}</td><td className="num">{s.blastocyst_development_rate_pct ?? '—'}</td></tr>)}</tbody></table>
+        <div className="muted" style={{ marginTop: 8 }}>Indicator names follow the ESHRE/Alpha Vienna consensus (laboratory) and ESHRE Maribor consensus (clinical). Competence and benchmark values are loaded from the papers into the KPI service when adopted; percentages are reported as percentages.</div></div>
+    </>}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

@@ -20,13 +20,32 @@ router = APIRouter(prefix="/api/v1/crm", tags=["CRM / ระบบบริห�
 
 # ── Helpers ───────────────────────────────────────────────
 
-_bk_counter = 0
+
+def _journey(db, appt, action, user=None):
+    """Journey-layer hook (patient push, visit reminder, Google Calendar, queue). Never breaks the CRM call."""
+    try:
+        from journey.backend.services.crm_hooks import on_appointment, assign_queue_number
+        if action == "checked_in":
+            assign_queue_number(db, appt)
+        on_appointment(db, appt, action, actor_id=user.id if user else None)
+    except Exception as e:  # journey layer optional
+        import logging
+        logging.getLogger("fcms.crm").warning("journey hook failed: %s", e)
+
 
 def _next_booking_number(db: Session) -> str:
-    global _bk_counter
+    """BK-YYYY-NNNNN derived from the database (safe across restarts and other writers such as the journey layer)."""
+    from ..models.crm_models import Appointment
     year = datetime.now().year
-    _bk_counter += 1
-    return f"BK-{year}-{_bk_counter:05d}"
+    last = (db.query(Appointment.booking_number).filter(Appointment.booking_number.like(f"BK-{year}-%"))
+              .order_by(Appointment.booking_number.desc()).first())
+    seq = 1
+    if last and last[0]:
+        try:
+            seq = int(last[0].rsplit("-", 1)[1]) + 1
+        except ValueError:
+            seq = 1
+    return f"BK-{year}-{seq:05d}"
 
 
 def _audit(db, user, action, resource_type, resource_id=None, detail=None, request=None):
@@ -143,6 +162,8 @@ async def create_appointment(
     db.add(appt)
     _audit(db, current_user, "CREATE", "appointment", appt.id,
            f"Booking {appt.booking_number} — {body['appointment_type']} on {body['appointment_date']}", request)
+    db.flush()
+    _journey(db, appt, "created", current_user)
     db.commit()
     db.refresh(appt)
 
@@ -232,6 +253,8 @@ async def update_appointment(
 
     _audit(db, current_user, "UPDATE", "appointment", appt.id,
            "; ".join(changes[:5]), request)
+    if any(ch.startswith(("appointment_date", "appointment_time", "status")) for ch in changes):
+        _journey(db, appt, "cancelled" if appt.status in ("cancelled", "no_show") else "updated", current_user)
     db.commit()
     return {"id": appt.id, "message": "Appointment updated / แก้ไขนัดหมายสำเร็จ"}
 
@@ -253,8 +276,9 @@ async def check_in_appointment(
 
     appt.status = "checked_in"
     _audit(db, current_user, "UPDATE", "appointment", appt.id, "Patient checked in", request)
+    _journey(db, appt, "checked_in", current_user)
     db.commit()
-    return {"id": appt.id, "status": "checked_in", "message": "Checked in / เช็คอินสำเร็จ"}
+    return {"id": appt.id, "status": "checked_in", "queue_number": appt.queue_number, "message": "Checked in / เช็คอินสำเร็จ"}
 
 
 @router.post("/appointments/{appt_id}/cancel")
@@ -281,6 +305,7 @@ async def cancel_appointment(
 
     _audit(db, current_user, "UPDATE", "appointment", appt.id,
            f"Cancelled: {appt.cancel_reason}", request)
+    _journey(db, appt, "cancelled", current_user)
     db.commit()
     return {"id": appt.id, "status": "cancelled", "message": "Cancelled / ยกเลิกสำเร็จ"}
 
@@ -325,6 +350,10 @@ async def reschedule_appointment(
     db.add(new_appt)
     _audit(db, current_user, "CREATE", "appointment", new_appt.id,
            f"Rescheduled from {old.booking_number} to {body['new_date']}", request)
+    db.flush()
+    new_appt.cycle_id = old.cycle_id
+    _journey(db, old, "cancelled", current_user)
+    _journey(db, new_appt, "rescheduled", current_user)
     db.commit()
     return {
         "old_id": old.id, "new_id": new_appt.id,

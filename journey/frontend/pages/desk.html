@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Front desk — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const J = '/api/v1/journey';
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [queue, setQueue] = useState([]); const [reqs, setReqs] = useState([]); const [due, setDue] = useState([]); const [conn, setConn] = useState(null); const [bc, setBc] = useState({ title_en: '', title_th: '', body_en: '', body_th: '' });
+  const load = () => Promise.all([api(`${J}/queue/today`), api(`${J}/booking-requests`), api(`${J}/cryo/due?within_days=90`), api(`${J}/connections`)]).then(([q, r, d, c]) => { setQueue(q); setReqs(r); setDue(d); setConn(c); }).catch(e => toast(e.message, true));
+  useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, []);
+  const checkin = async (a) => { try { await api(`/api/v1/crm/appointments/${a.id}/check-in`, { body: {} }); load(); } catch (e) { toast(e.message, true); } };
+  const call = async (a) => { try { const r = await api(`${J}/appointments/${a.id}/call`, { body: {} }); toast(`Called queue ${r.queue_number} — patient pushed`); load(); } catch (e) { toast(e.message, true); } };
+  const confirm = async (r) => { try { const x = await api(`${J}/booking-requests/${r.id}/confirm`, { body: {} }); toast(`Booked ${x.booking_number}`); load(); } catch (e) { toast(e.message, true); } };
+  const decline = async (r) => { await api(`${J}/booking-requests/${r.id}/decline`, { body: {} }); load(); };
+  const renew = async (t) => { const method = prompt('Payment method (promptpay / cash / credit_card / bank_transfer) — blank = invoice only', 'promptpay'); try { await api(`${J}/cryo/terms/${t.id}/renew`, { body: { payment_method: method || null } }); toast('Renewed'); load(); } catch (e) { toast(e.message, true); } };
+  const sync = async () => { try { const r = await api(`${J}/calendar/sync-all`, { body: {} }); toast(JSON.stringify(r)); } catch (e) { toast(e.message, true); } };
+  const send = async () => { try { const r = await api(`${J}/notifications/broadcast`, { body: bc }); toast(`Broadcast sent to ${r.sent} patients`); setBc({ title_en: '', title_th: '', body_en: '', body_th: '' }); } catch (e) { toast(e.message, true); } };
+  const waiting = queue.filter(a => a.status === 'checked_in');
+  return <Shell active="/desk" lang={lang} setLang={setLang} title={tr(lang, 'Front desk')}
+    actions={<><a className="btn ghost sm" href="/board/opd" target="_blank">OPD board (TV)</a><button className="btn ghost sm" onClick={sync} disabled={!conn || !conn.google_calendar}>📅 Sync Google Calendar</button></>}>
+    <div className="grid c4" style={{ marginBottom: 14 }}><Stat label="Today" value={queue.length} small="appointments" ink /><Stat label="Waiting" value={waiting.length} small="checked in" /><Stat label={tr(lang, 'Booking requests')} value={reqs.length} small="from the patient app" /><Stat label={tr(lang, 'Cryo renewals due')} value={due.length} small="next 90 days" /></div>
+    <div className="grid c2">
+      <div className="card"><h2>{tr(lang, 'Queue')} · {fmtDate(todayISO(), lang)}</h2><table className="t"><thead><tr><th>{tr(lang, 'Time')}</th><th>#</th><th>{tr(lang, 'Patient')}</th><th>Type</th><th>{tr(lang, 'Status')}</th><th></th></tr></thead>
+        <tbody>{queue.map(a => <tr key={a.id}><td>{a.appointment_time && a.appointment_time.slice(0, 5)}</td><td><b>{a.queue_number || ''}</b></td><td><b>{a.hn}</b> {nameOf(a, lang)}</td><td>{a.appointment_type}{a.google_event_id ? ' 📅' : ''}</td><td><Pill s={a.status === 'checked_in' ? 'pending' : (a.status === 'in_progress' ? 'done' : 'gray')}>{a.status}</Pill></td>
+          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{['scheduled', 'confirmed'].includes(a.status) && <button className="btn ghost xs" onClick={() => checkin(a)}>{tr(lang, 'Check-in')}</button>} {a.status === 'checked_in' && <button className="btn emerald xs" onClick={() => call(a)}>📣 {tr(lang, 'Call')}</button>}</td></tr>)}
+          {queue.length === 0 && <tr><td colSpan="6" className="muted center" style={{ padding: 24 }}>No appointments today.</td></tr>}</tbody></table></div>
+      <div>
+        <div className="card"><h2>{tr(lang, 'Booking requests')}</h2>{reqs.map(r => <div key={r.id} className="flex" style={{ marginBottom: 8 }}><div style={{ flex: 1 }}><b>{r.hn}</b> {nameOf(r, lang)} · {r.appointment_type}<div className="muted">{fmtDate(r.requested_date, lang)} {r.requested_time ? r.requested_time.slice(0, 5) : ''} · {r.note || ''}</div></div>
+          <button className="btn emerald xs" onClick={() => confirm(r)}>{tr(lang, 'Confirm')}</button><button className="btn ghost xs" onClick={() => decline(r)}>{tr(lang, 'Decline')}</button></div>)}{reqs.length === 0 && <div className="muted">None pending.</div>}</div>
+        <div className="card"><h2>{tr(lang, 'Cryo renewals due')}</h2>{due.map(t => <div key={t.id} className="flex" style={{ marginBottom: 8 }}><Pill s={t.status}>{t.days_left}d</Pill><div style={{ flex: 1 }}><b>{t.hn}</b> {nameOf(t, lang)} · {t.content_type} × {t.device_count}<div className="muted">paid until {fmtDate(t.paid_until, lang)} · {t.invoice ? `${t.invoice.number} ${t.invoice.status}` : 'no invoice'} · {t.phone}</div></div><button className="btn primary xs" onClick={() => renew(t)}>{tr(lang, 'Renew')}</button></div>)}{due.length === 0 && <div className="muted">Nothing due.</div>}</div>
+      </div>
+    </div>
+    <div className="grid c2" style={{ marginTop: 14 }}>
+      <div className="card"><h2>{tr(lang, 'Broadcast')} <span className="tag">LINE / SMS / e-mail</span></h2><div className="grid c2"><Field label="Title (EN)"><input value={bc.title_en} onChange={e => setBc({ ...bc, title_en: e.target.value })} /></Field><Field label="Title (TH)"><input value={bc.title_th} onChange={e => setBc({ ...bc, title_th: e.target.value })} /></Field>
+        <Field label="Message (EN)"><textarea rows="2" value={bc.body_en} onChange={e => setBc({ ...bc, body_en: e.target.value })} /></Field><Field label="Message (TH)"><textarea rows="2" value={bc.body_th} onChange={e => setBc({ ...bc, body_th: e.target.value })} /></Field></div>
+        <button className="btn ruby" style={{ marginTop: 10 }} onClick={send} disabled={!bc.title_th && !bc.title_en}>{tr(lang, 'Send')} to all active patients</button></div>
+      <div className="card ink"><h2>{tr(lang, 'Connections')}</h2>{conn && <div className="kv">{Object.entries(conn).filter(([k]) => k !== 'portal_base_url').map(([k, v]) => <React.Fragment key={k}><div>{k.replace(/_/g, ' ')}</div><div>{v ? <span style={{ color: 'var(--emerald-vivid)' }}>● connected</span> : <span style={{ color: 'var(--gold)' }}>○ not configured</span>}</div></React.Fragment>)}<div>patient app URL</div><div>{conn.portal_base_url}</div></div>}
+        <div className="muted" style={{ marginTop: 10 }}>Configure in <code>.env</code> — see journey/README.md. Unconfigured channels are recorded as “skipped”, nothing is lost.</div></div>
+    </div>
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

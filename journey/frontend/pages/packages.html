@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Packages — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const J = '/api/v1/journey';
+const ITEMS = ['wristband', 'opu_tube', 'oocyte_dish', 'culture_dish', 'sperm_tube', 'prep_tube', 'cryo_device', 'warming_dish', 'biopsy_tube', 'et_dish', 'iui_catheter'];
+
+function Editor({ p, types, consents, onSave, onClose }) {
+  const [f, setF] = useState(JSON.parse(JSON.stringify(p)));
+  const set = (k, v) => setF({ ...f, [k]: v });
+  const upd = (arr, i, k, v) => { const a = f[arr].slice(); a[i] = { ...a[i], [k]: v }; set(arr, a); };
+  const del = (arr, i) => set(arr, f[arr].filter((_, j) => j !== i));
+  const toggle = (arr, i, k, v) => { const a = f[arr].slice(); const cur = a[i][k] || []; a[i] = { ...a[i], [k]: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v] }; set(arr, a); };
+  return <Modal title={(f.code || 'New package')} onClose={onClose} wide>
+    <div className="grid c4">
+      <Field label="Code"><input value={f.code || ''} onChange={e => set('code', e.target.value.toUpperCase())} /></Field>
+      <Field label="Name (EN)"><input value={f.name_en || ''} onChange={e => set('name_en', e.target.value)} /></Field>
+      <Field label="Name (TH)"><input value={f.name_th || ''} onChange={e => set('name_th', e.target.value)} /></Field>
+      <Field label="Cycle type"><input value={f.cycle_type || ''} onChange={e => set('cycle_type', e.target.value)} /></Field>
+      <Field label="Anchor (D0 =)"><select value={f.anchor || 'opu'} onChange={e => set('anchor', e.target.value)}>{['opu', 'et', 'iui', 'procedure', 'collection'].map(x => <option key={x}>{x}</option>)}</select></Field>
+      <Field label="Default ET day"><input type="number" value={f.default_et_day ?? ''} onChange={e => set('default_et_day', e.target.value === '' ? null : +e.target.value)} /></Field>
+      <label className="flex muted" style={{ alignSelf: 'end' }}><input type="checkbox" checked={!!f.pgt} onChange={e => set('pgt', e.target.checked)} /> PGT</label>
+      <label className="flex muted" style={{ alignSelf: 'end' }}><input type="checkbox" checked={!!f.freeze_all} onChange={e => set('freeze_all', e.target.checked)} /> freeze-all</label>
+      <label className="flex muted" style={{ alignSelf: 'end' }}><input type="checkbox" checked={!!f.is_episode} onChange={e => set('is_episode', e.target.checked)} /> episode</label>
+      <label className="flex muted" style={{ alignSelf: 'end' }}><input type="checkbox" checked={f.is_active !== false} onChange={e => set('is_active', e.target.checked)} /> active</label>
+    </div>
+    <div className="hr" /><h2 style={{ fontSize: 14 }}>Medication template <button className="btn ghost xs" onClick={() => set('medication_template', [...(f.medication_template || []), { drug_en: '', drug_th: '', dose: 0, unit: 'IU', route: 'SC', slot: 'PM', start: 1, end: 10, drug_code: '' }])}>＋ row</button></h2>
+    <table className="t"><thead><tr><th>Drug EN</th><th>Drug TH</th><th>Dose</th><th>Unit</th><th>Route</th><th>Slot</th><th>From</th><th>To</th><th>Code</th><th></th></tr></thead><tbody>
+      {(f.medication_template || []).map((m, i) => <tr key={i}><td><input className="input" value={m.drug_en} onChange={e => upd('medication_template', i, 'drug_en', e.target.value)} /></td><td><input className="input" value={m.drug_th || ''} onChange={e => upd('medication_template', i, 'drug_th', e.target.value)} /></td>
+        <td><input className="input" style={{ width: 70 }} type="number" step="0.01" value={m.dose} onChange={e => upd('medication_template', i, 'dose', +e.target.value)} /></td><td><input className="input" style={{ width: 60 }} value={m.unit} onChange={e => upd('medication_template', i, 'unit', e.target.value)} /></td>
+        <td><input className="input" style={{ width: 55 }} value={m.route} onChange={e => upd('medication_template', i, 'route', e.target.value)} /></td><td><input className="input" style={{ width: 70 }} value={m.slot} onChange={e => upd('medication_template', i, 'slot', e.target.value)} /></td>
+        <td><input className="input" style={{ width: 55 }} type="number" value={m.start} onChange={e => upd('medication_template', i, 'start', +e.target.value)} /></td><td><input className="input" style={{ width: 55 }} type="number" value={m.end} onChange={e => upd('medication_template', i, 'end', +e.target.value)} /></td>
+        <td><input className="input" style={{ width: 90 }} value={m.drug_code || ''} onChange={e => upd('medication_template', i, 'drug_code', e.target.value)} /></td><td><button className="btn ghost xs" onClick={() => del('medication_template', i)}>✕</button></td></tr>)}</tbody></table>
+    <div className="hr" /><h2 style={{ fontSize: 14 }}>Lab events (day-relative to D0) <button className="btn ghost xs" onClick={() => set('lab_events', [...(f.lab_events || []), { key: 'opu', type: 'opu', day: 0, time: '08:00', title_en: types.opu.title_en, title_th: types.opu.title_th, items: types.opu.items, requires_witness: true, consents: [], write_back: types.opu.write_back, lane: 'lab', optional: false }])}>＋ event</button></h2>
+    <table className="t"><thead><tr><th>Step</th><th>Day</th><th>Time</th><th>Witness</th><th>Items</th><th>Consents</th><th>Optional</th><th></th></tr></thead><tbody>
+      {(f.lab_events || []).map((e, i) => <tr key={i}><td><select className="input" value={e.key} onChange={ev => { const k = ev.target.value; const t = types[k]; upd('lab_events', i, 'key', k); setTimeout(() => setF(ff => { const a = ff.lab_events.slice(); a[i] = { ...a[i], key: k, type: k, title_en: t.title_en, title_th: t.title_th, items: t.items, write_back: t.write_back }; return { ...ff, lab_events: a }; }), 0); }}>{Object.keys(types).map(k => <option key={k}>{k}</option>)}</select></td>
+        <td><input className="input" style={{ width: 55 }} type="number" value={e.day} onChange={ev => upd('lab_events', i, 'day', +ev.target.value)} /></td><td><input className="input" style={{ width: 80 }} value={e.time || ''} onChange={ev => upd('lab_events', i, 'time', ev.target.value)} /></td>
+        <td><input type="checkbox" checked={!!e.requires_witness} onChange={ev => upd('lab_events', i, 'requires_witness', ev.target.checked)} /></td>
+        <td style={{ maxWidth: 260 }}>{ITEMS.map(it => <label key={it} className="muted" style={{ marginRight: 6, fontSize: 11.5 }}><input type="checkbox" checked={(e.items || []).includes(it)} onChange={() => toggle('lab_events', i, 'items', it)} /> {it}</label>)}</td>
+        <td style={{ maxWidth: 220 }}>{consents.map(c => <label key={c.code} className="muted" style={{ marginRight: 6, fontSize: 11.5 }}><input type="checkbox" checked={(e.consents || []).includes(c.code)} onChange={() => toggle('lab_events', i, 'consents', c.code)} /> {c.code}</label>)}</td>
+        <td><input type="checkbox" checked={!!e.optional} onChange={ev => upd('lab_events', i, 'optional', ev.target.checked)} /></td><td><button className="btn ghost xs" onClick={() => del('lab_events', i)}>✕</button></td></tr>)}</tbody></table>
+    <div className="hr" /><div className="grid c2">
+      <div><h2 style={{ fontSize: 14 }}>Required consents</h2><div className="flex">{consents.map(c => <label key={c.code} className="flex muted"><input type="checkbox" checked={(f.consents || []).includes(c.code)} onChange={() => set('consents', (f.consents || []).includes(c.code) ? f.consents.filter(x => x !== c.code) : [...(f.consents || []), c.code])} /> {c.code}</label>)}</div></div>
+      <div><h2 style={{ fontSize: 14 }}>Billing items (THB) <button className="btn ghost xs" onClick={() => set('billing_items', [...(f.billing_items || []), { code: '', description_en: '', description_th: '', amount: 0, when: 'on_create' }])}>＋</button></h2>
+        {(f.billing_items || []).map((b, i) => <div key={i} className="flex" style={{ marginBottom: 4 }}><input className="input" style={{ width: 90 }} placeholder="code" value={b.code} onChange={e => upd('billing_items', i, 'code', e.target.value)} /><input className="input" style={{ flex: 1 }} placeholder="description EN" value={b.description_en} onChange={e => upd('billing_items', i, 'description_en', e.target.value)} /><input className="input" style={{ flex: 1 }} placeholder="คำอธิบาย TH" value={b.description_th || ''} onChange={e => upd('billing_items', i, 'description_th', e.target.value)} />
+          <input className="input" style={{ width: 90 }} type="number" value={b.amount} onChange={e => upd('billing_items', i, 'amount', +e.target.value)} /><select className="input" value={b.when} onChange={e => upd('billing_items', i, 'when', e.target.value)}>{['on_create', 'on_opu', 'on_et', 'on_freeze', 'storage_year'].map(w => <option key={w}>{w}</option>)}</select><button className="btn ghost xs" onClick={() => del('billing_items', i)}>✕</button></div>)}</div>
+    </div>
+    <div className="flex" style={{ marginTop: 14, justifyContent: 'flex-end' }}><button className="btn ghost" onClick={onClose}>Cancel</button><button className="btn primary" onClick={() => onSave(f)}>Save</button></div>
+  </Modal>;
+}
+
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [pkgs, setPkgs] = useState([]); const [types, setTypes] = useState({}); const [consents, setConsents] = useState([]); const [edit, setEdit] = useState(null); const [editC, setEditC] = useState(null);
+  const load = () => Promise.all([api(`${J}/packages?include_inactive=true`), api(`${J}/lab-event-types`), api(`${J}/consent-templates`)]).then(([p, t, c]) => { setPkgs(p); setTypes(t); setConsents(c); }).catch(e => toast(e.message, true));
+  useEffect(() => { load(); }, []);
+  const save = async (f) => { try { if (f.id) await api(`${J}/packages/${f.id}`, { method: 'PUT', body: f }); else await api(`${J}/packages`, { body: f }); setEdit(null); toast('Saved'); load(); } catch (e) { toast(e.message, true); } };
+  const saveC = async () => { try { await api(`${J}/consent-templates/${editC.id}`, { method: 'PUT', body: editC }); setEditC(null); toast('Saved'); load(); } catch (e) { toast(e.message, true); } };
+  const seed = async () => { const r = await api(`${J}/packages/seed`, { body: {} }); toast(`Seeded ${r.packages.length} packages, ${r.consents.length} consent templates`); load(); };
+  return <Shell active="/admin/packages" lang={lang} setLang={setLang} title={tr(lang, 'Packages')} actions={<><button className="btn ghost sm" onClick={seed}>Seed defaults</button><button className="btn ruby sm" onClick={() => setEdit({ code: '', name_en: '', name_th: '', cycle_type: '', anchor: 'opu', medication_template: [], lab_events: [], consents: ['pdpa'], billing_items: [], is_active: true })}>＋ New package</button></>}>
+    <div className="card"><h2>Treatment packages <span className="tag">one template drives chart · lab tasks · consents · app · billing</span></h2>
+      <table className="t"><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Anchor</th><th>Meds</th><th>Lab events</th><th>Witness points</th><th>Consents</th><th>Billing</th><th></th></tr></thead>
+        <tbody>{pkgs.map(p => <tr key={p.id} style={{ opacity: p.is_active ? 1 : .5 }}><td><b>{p.code}</b></td><td>{lang === 'th' ? (p.name_th || p.name_en) : p.name_en}{p.pgt && <span className="tag ruby" style={{ marginLeft: 6 }}>PGT</span>}{p.freeze_all && <span className="tag" style={{ marginLeft: 6 }}>freeze-all</span>}</td><td>{p.cycle_type}</td><td>{p.anchor}{p.default_et_day != null ? ` · ET D${p.default_et_day}` : ''}</td>
+          <td className="num">{(p.medication_template || []).length}</td><td className="num">{(p.lab_events || []).length}</td><td className="num">{(p.lab_events || []).filter(e => e.requires_witness).length}</td><td className="num">{(p.consents || []).length}</td><td className="num">{(p.billing_items || []).filter(b => b.amount > 0).length}/{(p.billing_items || []).length} priced</td>
+          <td><button className="btn ghost xs" onClick={() => setEdit(p)}>Edit</button></td></tr>)}</tbody></table></div>
+    <div className="card"><h2>Consent templates</h2><table className="t"><thead><tr><th>Code</th><th>Title</th><th>Signer</th><th>Version</th><th></th></tr></thead>
+      <tbody>{consents.map(c => <tr key={c.id}><td><b>{c.code}</b></td><td>{c.title_en}<div className="muted">{c.title_th}</div></td><td>{c.signer}</td><td>{c.version}</td><td><button className="btn ghost xs" onClick={() => setEditC(c)}>Edit text</button></td></tr>)}</tbody></table></div>
+    {edit && <Editor p={edit} types={types} consents={consents} onSave={save} onClose={() => setEdit(null)} />}
+    {editC && <Modal title={editC.code} onClose={() => setEditC(null)}><div className="grid c2"><Field label="Title EN"><input value={editC.title_en} onChange={e => setEditC({ ...editC, title_en: e.target.value })} /></Field><Field label="Title TH"><input value={editC.title_th || ''} onChange={e => setEditC({ ...editC, title_th: e.target.value })} /></Field>
+      <Field label="Version"><input value={editC.version} onChange={e => setEditC({ ...editC, version: e.target.value })} /></Field><Field label="Signer"><select value={editC.signer} onChange={e => setEditC({ ...editC, signer: e.target.value })}>{['patient', 'partner', 'both'].map(x => <option key={x}>{x}</option>)}</select></Field></div>
+      <Field label="Body EN"><textarea rows="6" value={editC.body_en || ''} onChange={e => setEditC({ ...editC, body_en: e.target.value })} /></Field><Field label="Body TH"><textarea rows="6" value={editC.body_th || ''} onChange={e => setEditC({ ...editC, body_th: e.target.value })} /></Field>
+      <div className="flex" style={{ marginTop: 12, justifyContent: 'flex-end' }}><button className="btn primary" onClick={saveC}>Save</button></div></Modal>}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

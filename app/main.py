@@ -28,6 +28,8 @@ MODULE_ROUTERS = [
     ("module6.backend.api.crm_routes",             ["router"]),
     ("module7.backend.api.accounting_routes",      ["router"]),
     ("module10.backend.api.timeline_routes",       ["router"]),
+    ("journey.backend.api.journey_routes",         ["router"]),   # Journey layer: cycle spine · lab chain · cryo · KPIs
+    ("journey.backend.api.portal_routes",          ["router"]),   # Patient App API (LINE Mini App + PWA)
 ]
 
 
@@ -81,6 +83,36 @@ def create_app() -> FastAPI:
     @app.get("/dashboard", include_in_schema=False)
     def dashboard_page():
         return FileResponse(root / "app" / "static" / "dashboard.html")
+
+    # ── Journey layer pages (React in-browser, vendored libs, LIFE by Dr. Pat design system) ──
+    j_dir = root / "journey" / "frontend"
+    app.mount("/journey/vendor", StaticFiles(directory=j_dir / "vendor"), name="journey-vendor")
+    app.mount("/brand", StaticFiles(directory=root / "module1" / "frontend" / "public"), name="brand")   # logo.png
+    app.mount("/journey/static", StaticFiles(directory=j_dir / "pages"), name="journey-static")
+    JOURNEY_PAGES = {
+        "/cycles": "cycles.html",            # cycle list + create from package
+        "/cycles/{cycle_id}": "cycle.html",  # cycle workspace (chart · monitoring · tasks · observation · cryo · outcome)
+        "/lab/todo": "lab_todo.html",        # Lab To-Do list + labels
+        "/lab/witness": "witness.html",      # tablet witnessing (camera / scanner)
+        "/admin/packages": "packages.html",  # package & consent template admin
+        "/insight": "insight.html",          # KPIs
+        "/desk": "desk.html",                # front desk: today's queue, booking requests, cryo due
+        "/portal": "portal.html",            # Patient App (LIFF + PWA)
+    }
+    for route, fname in JOURNEY_PAGES.items():
+        def _make(fn=fname):
+            def _page(cycle_id: str = None):
+                return FileResponse(j_dir / "pages" / fn)
+            return _page
+        app.get(route, include_in_schema=False)(_make())
+
+    @app.get("/portal/manifest.webmanifest", include_in_schema=False)
+    def portal_manifest():
+        return FileResponse(j_dir / "pages" / "manifest.webmanifest", media_type="application/manifest+json")
+
+    @app.get("/portal/sw.js", include_in_schema=False)
+    def portal_sw():
+        return FileResponse(j_dir / "pages" / "sw.js", media_type="application/javascript")
 
     @app.get("/login", include_in_schema=False)
     def login_page():

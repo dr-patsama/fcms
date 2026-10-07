@@ -37,3 +37,9 @@ redis==5.2.1           # Session blacklisting + rate limiting
 
 # ── HEIC image support (module 4 Rx extraction) ──────────
 pillow-heif==0.21.0    # Convert iPhone HEIC photos for document extraction
+
+# ── Journey layer (cycle spine · witnessing · patient app · Google Calendar) ──
+qrcode[pil]==8.2          # QR labels + PromptPay QR
+google-api-python-client==2.201.0   # Google Calendar mirror of appointments
+google-auth==2.60.0
+google-auth-oauthlib==1.5.0

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cycle workspace — LIFE by Dr. Pat</title>
+<link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
+<script type="text/babel" src="/journey/static/journey-shared.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+requireLogin();
+const CID = location.pathname.split('/').filter(Boolean).pop();
+const J = '/api/v1/journey';
+const TABS = ['Overview', 'Stimulation chart', 'Monitoring', 'Schedule & tasks', 'Observation', 'Consents', 'Outcome', 'Events'];
+
+/* ───────────── Overview ───────────── */
+function Overview({ ws, lang }) {
+  const c = ws.cycle, s = ws.observation.summary;
+  const pendingTasks = ws.tasks.filter(t => t.status === 'pending');
+  return <div className="grid c3">
+    <div className="card ink" style={{ gridColumn: 'span 2' }}><h2>{c.cycle_number} <span className="tag gold">{c.package ? c.package.code : c.cycle_type}</span></h2>
+      <div className="kv"><div>{tr(lang, 'Status')}</div><div><Pill s={c.status === 'cancelled' ? 'failed' : 'active'}>{c.status}</Pill></div>
+        <div>{tr(lang, 'Physician')}</div><div>{c.physician || '—'}</div>
+        <div>{tr(lang, 'Medication start')}</div><div>{fmtDate(c.medication_start_date, lang)}</div>
+        <div>Trigger</div><div>{c.trigger_at ? fmtDT(c.trigger_at, lang) : '—'}</div>
+        <div>D0</div><div>{fmtDate(c.d0_date, lang)} {c.planned_et_day != null && <span className="muted"> · planned ET D{c.planned_et_day}</span>}</div>
+        <div>{tr(lang, 'Physician order')}</div><div>{c.physician_order || '—'}</div>
+        <div>Registry report</div><div>{c.registry_report_status}</div>
+        <div>Witness errors</div><div>{c.errors_count}</div></div></div>
+    <div className="card"><h2>{tr(lang, 'Patient')}</h2>
+      <b>{ws.patient.hn_number}</b> {nameOf(ws.patient, lang)} <span className="muted">{ws.patient.age} y</span>
+      <div className="muted">{ws.patient.phone} · {ws.patient.preferred_language}</div>
+      <div className="hr" /><h2>{tr(lang, 'Partner')}</h2>
+      {ws.partner ? <><b>{ws.partner.hn_number}</b> {nameOf(ws.partner, lang)} <span className="muted">{ws.partner.age} y</span></> : <span className="muted">not linked</span>}</div>
+    <Stat label={tr(lang, 'Oocytes retrieved')} value={s.oocytes_retrieved} small={`MII ${s.mii || 0}`} />
+    <Stat label="2PN" value={s['2pn']} small={`${s.inseminated} inseminated`} />
+    <Stat label={tr(lang, 'Blastocysts')} value={s.blastocysts} small={`${s.frozen} frozen · ${s.transferred} transferred`} />
+    <div className="card" style={{ gridColumn: 'span 3' }}><h2>Next steps</h2>
+      {pendingTasks.length === 0 ? <div className="muted">No pending lab tasks.</div> :
+        <div className="flex">{pendingTasks.slice(0, 8).map(t => <Pill key={t.id} s={t.effective_status}>{`D${t.lab_day} ${t.title_en}`}</Pill>)}</div>}
+      <div className="flex" style={{ marginTop: 10 }}>{ws.consents.filter(x => x.status !== 'signed').map(x => <Pill key={x.id} s="blocked">consent: {x.consent_type}</Pill>)}</div></div>
+  </div>;
+}
+
+/* ───────────── Stimulation chart ───────────── */
+function Chart({ ws, lang, reload, toast, hp }) {
+  const c = ws.cycle, meds = ws.chart.medications;
+  const start = c.medication_start_date;
+  const nDays = Math.max(16, ...meds.map(m => m.end_day_index), c.d0_date && start ? Math.round((new Date(c.d0_date) - new Date(start)) / 86400000) + 8 : 0);
+  const days = Array.from({ length: nDays }, (_, i) => i + 1);
+  const dateOf = (i) => start ? addDays(start, i - 1) : null;
+  const monByDate = Object.fromEntries(ws.monitoring.map(m => [m.calendar_date, m]));
+  const [edit, setEdit] = useState(null);
+  const blank = { drug_en: '', drug_th: '', dose: '', unit: 'IU', route: 'SC', slot: 'PM', start_day_index: 1, end_day_index: 10 };
+  const save = async () => { try { if (edit.id) await api(`${J}/medications/${edit.id}`, { method: 'PUT', body: edit }); else await api(`${J}/cycles/${CID}/medications`, { body: edit }); setEdit(null); reload(); } catch (e) { toast(e.message, true); } };
+  const del = async (id) => { if (!confirm('Delete this medication row?')) return; await api(`${J}/medications/${id}`, { method: 'DELETE' }); reload(); };
+  const publish = async () => { try { const r = await api(`${J}/cycles/${CID}/publish`); toast(`Plan published — ${r.doses_created} doses, reminders scheduled`); reload(); } catch (e) { toast(e.message, true); } };
+  const tick = async (d) => { try { await api(`${J}/doses/${d.id}/taken`, { body: { undo: !!d.taken_at } }); reload(); } catch (e) { toast(e.message, true); } };
+  const d0i = c.d0_date && start ? Math.round((new Date(c.d0_date) - new Date(start)) / 86400000) + 1 : null;
+  const todayI = start ? Math.round((new Date(todayISO()) - new Date(start)) / 86400000) + 1 : null;
+  return <div>
+    <div className="flex" style={{ marginBottom: 12 }}>
+      <button className="btn ghost sm" onClick={() => setEdit(blank)}>＋ {tr(lang, 'Add medication')}</button>
+      <button className="btn primary sm" onClick={publish}>{tr(lang, 'Publish plan')}</button>
+      <span className="muted">{c.plan_published_at ? 'Published ' + fmtDT(c.plan_published_at, lang) : 'Not yet published to the patient app'}</span></div>
+    {!start && <div className="card" style={{ background: '#FFF7D6' }}>Set the medication start date (Overview → edit) before publishing.</div>}
+    <div className="chart card" style={{ padding: 8 }}><table>
+      <thead><tr><th className="drug">{tr(lang, 'Drug')}</th>{days.map(i => <th key={i} className={(i === d0i ? 'd0 ' : '') + (i === todayI ? 'today' : '')}>
+        <div>S{i}{d0i != null && i >= d0i && i - d0i <= 7 ? ` · D${i - d0i}` : ''}</div><div className="muted" style={{ fontSize: 10.5 }}>{dateOf(i) ? dateOf(i).slice(5) : ''}</div></th>)}</tr></thead>
+      <tbody>{meds.map(m => <tr key={m.id}><td className="drug"><b>{lang === 'th' ? (m.drug_th || m.drug_en) : m.drug_en}</b><div className="muted">{m.dose} {m.unit} {m.route} {m.slot} <a onClick={() => setEdit(m)} style={{ cursor: 'pointer' }}>✎</a> <a onClick={() => del(m.id)} style={{ cursor: 'pointer', color: 'var(--ruby)' }}>✕</a></div></td>
+        {days.map(i => { const dt = dateOf(i); const d = dt && m.doses[dt]; const inRange = i >= m.start_day_index && i <= m.end_day_index;
+          return <td key={i} className={d ? 'dose' + (d.taken_at ? ' taken' : '') : (inRange ? 'dose' : '')} onClick={() => d && tick(d)} title={d ? (d.taken_at ? 'taken ' + fmtDT(d.taken_at) : 'click = mark taken') : ''}>{d ? (d.taken_at ? '✓' : d.dose) : (inRange ? m.dose : '')}</td>; })}</tr>)}
+        {['e2', 'lh', 'p4', 'endometrium_mm'].map(k => <tr key={k}><td className="drug muted">{k.toUpperCase().replace('_MM', ' (mm)')}</td>{days.map(i => { const mo = monByDate[dateOf(i)]; return <td key={i} className="mon">{mo && mo[k] != null ? mo[k] : ''}</td>; })}</tr>)}
+        <tr><td className="drug muted">Follicles R / L</td>{days.map(i => { const mo = monByDate[dateOf(i)]; return <td key={i} className="mon" style={{ fontSize: 10.5 }}>{mo ? `${(mo.follicles_right || []).join(',')} / ${(mo.follicles_left || []).join(',')}` : ''}</td>; })}</tr>
+      </tbody></table></div>
+    {edit && <Modal title={edit.id ? 'Edit medication' : tr(lang, 'Add medication')} onClose={() => setEdit(null)}>
+      <div className="grid c2">
+        <Field label={tr(lang, 'Drug') + ' (EN)'}><input value={edit.drug_en} onChange={e => setEdit({ ...edit, drug_en: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Drug') + ' (TH)'}><input value={edit.drug_th || ''} onChange={e => setEdit({ ...edit, drug_th: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Dose')}><input type="number" step="0.01" value={edit.dose ?? ''} onChange={e => setEdit({ ...edit, dose: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Unit')}><select value={edit.unit || ''} onChange={e => setEdit({ ...edit, unit: e.target.value })}>{['IU', 'mg', 'mcg', 'tab', 'ml', 'dose'].map(u => <option key={u}>{u}</option>)}</select></Field>
+        <Field label={tr(lang, 'Route')}><select value={edit.route || ''} onChange={e => setEdit({ ...edit, route: e.target.value })}>{['SC', 'IM', 'PO', 'PV', 'IN', 'TD'].map(u => <option key={u}>{u}</option>)}</select></Field>
+        <Field label={tr(lang, 'Slot') + ' (AM / NOON / PM / HS / HH:MM)'}><input value={edit.slot || ''} onChange={e => setEdit({ ...edit, slot: e.target.value })} /></Field>
+        <Field label={tr(lang, 'From day')}><input type="number" value={edit.start_day_index} onChange={e => setEdit({ ...edit, start_day_index: +e.target.value })} /></Field>
+        <Field label={tr(lang, 'To day')}><input type="number" value={edit.end_day_index} onChange={e => setEdit({ ...edit, end_day_index: +e.target.value })} /></Field>
+        <Field label="Instructions (EN)"><input value={edit.instructions_en || ''} onChange={e => setEdit({ ...edit, instructions_en: e.target.value })} /></Field>
+        <Field label="Instructions (TH)"><input value={edit.instructions_th || ''} onChange={e => setEdit({ ...edit, instructions_th: e.target.value })} /></Field>
+      </div><div className="flex" style={{ marginTop: 14, justifyContent: 'flex-end' }}><button className="btn primary" onClick={save}>{tr(lang, 'Save')}</button></div></Modal>}
+  </div>;
+}
+
+/* ───────────── Monitoring ───────────── */
+function Monitoring({ ws, lang, reload, toast }) {
+  const [f, setF] = useState({ calendar_date: todayISO(), follicles_right: '', follicles_left: '', endometrium_mm: '', endometrium_pattern: 'trilaminar', e2: '', lh: '', p4: '', decision_en: '', released_to_patient: false });
+  const num = (v) => v === '' ? null : +v; const list = (v) => v.split(/[,\s]+/).filter(Boolean).map(Number);
+  const save = async () => { try { await api(`${J}/cycles/${CID}/monitoring`, { body: { ...f, follicles_right: list(f.follicles_right), follicles_left: list(f.follicles_left), endometrium_mm: num(f.endometrium_mm), e2: num(f.e2), lh: num(f.lh), p4: num(f.p4) } }); toast('Monitoring saved'); reload(); } catch (e) { toast(e.message, true); } };
+  return <div>
+    <div className="card"><h2>{tr(lang, 'Record')} <span className="tag">Voluson images attach via Module 3</span></h2>
+      <div className="row"><Field label={tr(lang, 'Date')}><input type="date" value={f.calendar_date} onChange={e => setF({ ...f, calendar_date: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Follicles right')}><input placeholder="12, 11, 10" value={f.follicles_right} onChange={e => setF({ ...f, follicles_right: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Follicles left')}><input placeholder="13, 9" value={f.follicles_left} onChange={e => setF({ ...f, follicles_left: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Endometrium')}><input type="number" step="0.1" value={f.endometrium_mm} onChange={e => setF({ ...f, endometrium_mm: e.target.value })} /></Field>
+        <Field label="Pattern"><select value={f.endometrium_pattern} onChange={e => setF({ ...f, endometrium_pattern: e.target.value })}>{['trilaminar', 'homogeneous', 'other'].map(x => <option key={x}>{x}</option>)}</select></Field></div>
+      <div className="row" style={{ marginTop: 10 }}><Field label="E2 (pg/mL)"><input type="number" value={f.e2} onChange={e => setF({ ...f, e2: e.target.value })} /></Field>
+        <Field label="LH (IU/L)"><input type="number" step="0.1" value={f.lh} onChange={e => setF({ ...f, lh: e.target.value })} /></Field>
+        <Field label="P4 (ng/mL)"><input type="number" step="0.01" value={f.p4} onChange={e => setF({ ...f, p4: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Decision')}><input value={f.decision_en} onChange={e => setF({ ...f, decision_en: e.target.value })} placeholder="continue / adjust / trigger tonight" /></Field>
+        <label className="flex fixed muted"><input type="checkbox" checked={f.released_to_patient} onChange={e => setF({ ...f, released_to_patient: e.target.checked })} /> {tr(lang, 'Release to patient')}</label>
+        <button className="btn primary fixed" onClick={save}>{tr(lang, 'Save')}</button></div></div>
+    <div className="card"><table className="t"><thead><tr><th>{tr(lang, 'Date')}</th><th>Day</th><th>Follicles R</th><th>Follicles L</th><th>Endo</th><th>E2</th><th>LH</th><th>P4</th><th>{tr(lang, 'Decision')}</th><th>{tr(lang, 'Released')}</th></tr></thead>
+      <tbody>{ws.monitoring.map(m => <tr key={m.id}><td>{fmtDate(m.calendar_date, lang)}</td><td>S{m.day_index}</td><td>{(m.follicles_right || []).join(', ')}</td><td>{(m.follicles_left || []).join(', ')}</td><td>{m.endometrium_mm} {m.endometrium_pattern}</td><td>{m.e2}</td><td>{m.lh}</td><td>{m.p4}</td><td>{m.decision_en}</td><td>{m.released_to_patient ? '✓' : ''}</td></tr>)}</tbody></table></div>
+  </div>;
+}
+
+/* ───────────── Schedule & tasks ───────────── */
+function Schedule({ ws, lang, reload, toast }) {
+  const c = ws.cycle;
+  const [trig, setTrig] = useState({ trigger_at: '', drug: '' }); const [sch, setSch] = useState({ d0: c.d0_date || '', time: '08:00', room: '', physician_order: c.physician_order || '' });
+  const setTrigger = async () => { try { const r = await api(`${J}/cycles/${CID}/trigger`, { body: trig }); toast(`Trigger set · suggested OPU ${fmtDT(r.suggested_opu, lang)}`); setSch(s => ({ ...s, d0: r.suggested_opu.slice(0, 10), time: r.suggested_opu.slice(11, 16) })); reload(); } catch (e) { toast(e.message, true); } };
+  const schedule = async () => { try { const r = await api(`${J}/cycles/${CID}/schedule`, { body: sch }); toast(`Scheduled · ${r.tasks_generated} lab tasks generated`); reload(); } catch (e) { toast(e.message, true); } };
+  const done = async (t) => { try { await api(`${J}/lab/tasks/${t.id}/done`, { body: {} }); reload(); } catch (e) { toast(e.message, true); } };
+  const fail = async (t) => { const reason = prompt('Reason'); if (!reason) return; await api(`${J}/lab/tasks/${t.id}/failed`, { body: { reason } }); reload(); };
+  const print = async (day) => { try { const b = await api(`${J}/labels/print`, { body: { task_ids: ws.tasks.filter(t => day == null || t.lab_day === day).map(t => t.id) } }); openBlob(b); } catch (e) { toast(e.message, true); } };
+  const byDay = ws.tasks.reduce((a, t) => { (a[t.lab_day] = a[t.lab_day] || []).push(t); return a; }, {});
+  return <div>
+    <div className="grid c2">
+      <div className="card"><h2>{tr(lang, 'Set trigger')}</h2><div className="row"><Field label={tr(lang, 'Trigger time')}><input type="datetime-local" value={trig.trigger_at} onChange={e => setTrig({ ...trig, trigger_at: e.target.value })} /></Field>
+        <Field label={tr(lang, 'Drug')}><input value={trig.drug} onChange={e => setTrig({ ...trig, drug: e.target.value })} placeholder="hCG 250 mcg / GnRH agonist" /></Field><button className="btn primary fixed" onClick={setTrigger} disabled={!trig.trigger_at}>{tr(lang, 'Save')}</button></div>
+        <div className="muted" style={{ marginTop: 8 }}>{c.trigger_at ? 'Current: ' + fmtDT(c.trigger_at, lang) : 'Not set'} · the patient gets a push with the exact time.</div></div>
+      <div className="card"><h2>{tr(lang, 'Schedule procedure')} <span className="tag">{c.package ? c.package.anchor : 'opu'} = D0</span></h2>
+        <div className="row"><Field label={tr(lang, 'Procedure date (D0)')}><input type="date" value={sch.d0} onChange={e => setSch({ ...sch, d0: e.target.value })} /></Field>
+          <Field label={tr(lang, 'Time')}><input type="time" value={sch.time} onChange={e => setSch({ ...sch, time: e.target.value })} /></Field>
+          <Field label={tr(lang, 'Room')}><input value={sch.room} onChange={e => setSch({ ...sch, room: e.target.value })} /></Field>
+          <Field label={tr(lang, 'Physician order')}><input value={sch.physician_order} onChange={e => setSch({ ...sch, physician_order: e.target.value })} /></Field>
+          <button className="btn ruby fixed" onClick={schedule} disabled={!sch.d0}>{c.d0_date ? 'Reschedule' : tr(lang, 'Schedule procedure')}</button></div>
+        <div className="muted" style={{ marginTop: 8 }}>Creates the OR appointment, numbers D0–D7, generates the lab to-do list and labels, pushes the patient, mirrors to Google Calendar.</div></div>
+    </div>
+    {ws.appointments.length > 0 && <div className="card"><h2>Appointments</h2><div className="flex">{ws.appointments.map(a => <Pill key={a.id} s={a.status === 'cancelled' ? 'failed' : 'pending'}>{a.appointment_type} · {fmtDate(a.appointment_date, lang)} {a.appointment_time && a.appointment_time.slice(0, 5)} · {a.booking_number}{a.google_event_id ? ' · 📅' : ''}</Pill>)}</div></div>}
+    <div className="card"><h2>Lab tasks <button className="btn ghost xs right" onClick={() => print(null)}>🖨 {tr(lang, 'Print labels')} (all)</button></h2>
+      {Object.keys(byDay).sort((a, b) => a - b).map(d => <div key={d} style={{ marginBottom: 14 }}><div className="flex"><span className="tag">D{d}</span><span className="muted">{byDay[d][0] && fmtDate(byDay[d][0].scheduled_date, lang)}</span><button className="btn ghost xs" onClick={() => print(+d)}>🖨 D{d} labels</button></div>
+        <table className="t" style={{ marginTop: 6 }}><tbody>{byDay[d].map(t => <tr key={t.id}><td style={{ width: 70 }}>{t.scheduled_time ? t.scheduled_time.slice(0, 5) : ''}</td><td><b>{lang === 'th' ? (t.title_th || t.title_en) : t.title_en}</b>{t.notes === 'optional' && <span className="muted"> (optional)</span>}<div className="muted">{t.patient_id !== ws.patient.id ? 'partner · ' : ''}{(t.items_required || []).join(', ')}{t.requires_witness ? ' · witness' : ''}</div></td>
+          <td><Pill s={t.effective_status}>{t.effective_status}</Pill>{t.blocked_by_consent.length > 0 && <div className="muted">needs: {t.blocked_by_consent.join(', ')}</div>}</td>
+          <td style={{ textAlign: 'right' }}>{t.status === 'pending' && <>{t.requires_witness ? <a className="btn emerald xs" href={`/lab/witness?task=${t.id}`}>{tr(lang, 'Witness')}</a> : <button className="btn emerald xs" onClick={() => done(t)}>{tr(lang, 'Done')}</button>} <button className="btn ghost xs" onClick={() => fail(t)}>{tr(lang, 'Failed')}</button></>}
+            {t.status === 'done' && <span className="muted">{fmtDT(t.done_at, lang)}</span>}</td></tr>)}</tbody></table></div>)}
+      {ws.tasks.length === 0 && <div className="muted">Schedule the procedure to generate the lab to-do list.</div>}</div>
+  </div>;
+}
+
+/* ───────────── Observation ───────────── */
+function Observation({ ws, lang, reload, toast }) {
+  const o = ws.observation; const [day, setDay] = useState('OPU');
+  const days = ['OPU', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'Summary', 'Album', 'Cryo', 'PGT'];
+  const [opu, setOpu] = useState(o.opu || { total_follicles_aspirated: '', total_oocytes_retrieved: '', mii_count: '', mi_count: '', gv_count: '', degenerated_count: '', anesthesia_type: 'sedation', complications: '' });
+  const saveOpu = async () => { try { await api(`${J}/cycles/${CID}/opu`, { body: opu }); toast('OPU saved'); reload(); } catch (e) { toast(e.message, true); } };
+  const [fert, setFert] = useState({});
+  const saveFert = async () => { try { await api(`${J}/cycles/${CID}/fertilization`, { body: { items: Object.entries(fert).map(([oocyte_id, status]) => ({ oocyte_id, status })) } }); toast('Fertilisation saved'); setFert({}); reload(); } catch (e) { toast(e.message, true); } };
+  const [grade, setGrade] = useState({});
+  const saveGrade = async (e, d) => { const g = grade[e.embryo_id] || {}; try { await api(`${J}/cycles/${CID}/embryos/${e.embryo_id}/assessment`, { body: { assessment_day: d, ...g } }); toast(`${e.embryo_code} D${d} saved`); reload(); } catch (err) { toast(err.message, true); } };
+  const freeze = async (e) => { const tank = prompt('Tank / canister / goblet / position (e.g. T1/C2/G3/1)', 'T1/C1/G1/1'); if (!tank) return; const [tank_id, canister, goblet, position] = tank.split('/'); try { await api(`${J}/cycles/${CID}/embryos/${e.embryo_id}/freeze`, { body: { device: 'cryotop', tank_id, canister, goblet, position } }); toast('Frozen · storage term opened'); reload(); } catch (err) { toast(err.message, true); } };
+  const transfer = async (ids) => { try { await api(`${J}/cycles/${CID}/transfer`, { body: { embryo_ids: ids, ultrasound_guided: true } }); toast('Transfer recorded'); reload(); } catch (err) { toast(err.message, true); } };
+  const [sel, setSel] = useState([]);
+  const upload = async (file, lab_day, embryo_id) => { const fd = new FormData(); fd.append('file', file); if (lab_day != null) fd.append('lab_day', lab_day); if (embryo_id) fd.append('embryo_id', embryo_id); try { await api(`${J}/cycles/${CID}/photos`, { body: fd }); toast('Photo added'); reload(); } catch (e) { toast(e.message, true); } };
+  const release = async (ids) => { try { await api(`${J}/cycles/${CID}/photos/release`, { body: { photo_ids: ids } }); toast('Released to patient album'); reload(); } catch (e) { toast(e.message, true); } };
+  const embryos = o.table.filter(x => x.embryo_id);
+  const dNum = day.startsWith('D') ? +day.slice(1) : null;
+  return <div>
+    <div className="daytabs">{days.map(d => <button key={d} className={day === d ? 'on' : ''} onClick={() => setDay(d)}>{d}</button>)}</div>
+    {day === 'OPU' && <div className="card"><h2>Oocyte retrieval</h2><div className="row">
+      {[['total_follicles_aspirated', tr(lang, 'Follicles aspirated')], ['total_oocytes_retrieved', tr(lang, 'Oocytes retrieved')], ['mii_count', 'MII'], ['mi_count', 'MI'], ['gv_count', 'GV'], ['degenerated_count', 'Degenerated']].map(([k, l]) => <Field key={k} label={l}><input type="number" value={opu[k] ?? ''} onChange={e => setOpu({ ...opu, [k]: e.target.value === '' ? null : +e.target.value })} /></Field>)}
+      <Field label="Anaesthesia"><input value={opu.anesthesia_type || ''} onChange={e => setOpu({ ...opu, anesthesia_type: e.target.value })} /></Field>
+      <Field label="Complications"><input value={opu.complications || ''} onChange={e => setOpu({ ...opu, complications: e.target.value })} /></Field>
+      <button className="btn primary fixed" onClick={saveOpu}>{tr(lang, 'Save')}</button></div>
+      <div className="muted" style={{ marginTop: 8 }}>Saving creates one oocyte row per retrieved oocyte (maturity from the counts). OPU start time is stamped by the witness scan.</div></div>}
+    {day === 'D0' && <div className="card"><h2>Oocytes · insemination</h2><table className="t"><thead><tr><th>#</th><th>Maturity</th><th>Inseminated</th><th>Method</th><th>Time</th></tr></thead>
+      <tbody>{o.table.filter(x => x.oocyte_number).map(x => <tr key={x.oocyte_id}><td>{x.oocyte_number}</td><td>{x.maturity}</td><td>{x.inseminated ? '✓' : ''}</td><td>{x.method}</td><td>{x.insemination_time ? fmtDT(x.insemination_time, lang) : ''}</td></tr>)}</tbody></table>
+      <div className="muted" style={{ marginTop: 8 }}>Insemination / ICSI time is written back by the witness scan of the ICSI step. Sperm prep: {o.sperm_prep ? `${o.sperm_prep.preparation_method || ''} ${o.sperm_prep.prepared_at ? fmtDT(o.sperm_prep.prepared_at, lang) : ''}` : '—'}</div></div>}
+    {day === 'D1' && <div className="card"><h2>{tr(lang, 'Fertilisation')} check</h2><table className="t"><thead><tr><th>#</th><th>Maturity</th><th>Status</th><th>Embryo</th></tr></thead>
+      <tbody>{o.table.filter(x => x.oocyte_number).map(x => <tr key={x.oocyte_id}><td>{x.oocyte_number}</td><td>{x.maturity}</td>
+        <td><select className="input" value={fert[x.oocyte_id] || x.fertilization || ''} onChange={e => setFert({ ...fert, [x.oocyte_id]: e.target.value })}><option value="">—</option>{['2PN', '1PN', '3PN', '0PN', 'DG'].map(s => <option key={s}>{s}</option>)}</select></td><td>{x.embryo_code}</td></tr>)}</tbody></table>
+      <button className="btn primary" style={{ marginTop: 10 }} onClick={saveFert} disabled={!Object.keys(fert).length}>{tr(lang, 'Save')}</button><span className="muted"> 2PN creates an embryo record.</span></div>}
+    {dNum != null && dNum >= 2 && <div className="card"><h2>Day {dNum} assessment</h2>
+      <table className="t"><thead><tr><th>Embryo</th><th>{dNum >= 5 ? tr(lang, 'Expansion') + ' / ICM / TE' : tr(lang, 'Cells') + ' / ' + tr(lang, 'Fragmentation %')}</th><th>{tr(lang, 'Disposition')}</th><th>Current</th><th></th></tr></thead>
+        <tbody>{embryos.map(e => { const g = grade[e.embryo_id] || {}; const cur = e.days[dNum]; return <tr key={e.embryo_id}><td><b>{e.embryo_code}</b></td>
+          <td>{dNum >= 5 ? <div className="flex"><select className="input" value={g.expansion || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, expansion: ev.target.value } })}><option value="">exp</option>{[1, 2, 3, 4, 5, 6].map(n => <option key={n}>{n}</option>)}</select>
+            <select className="input" value={g.icm_grade || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, icm_grade: ev.target.value } })}><option value="">ICM</option>{['A', 'B', 'C'].map(n => <option key={n}>{n}</option>)}</select>
+            <select className="input" value={g.te_grade || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, te_grade: ev.target.value } })}><option value="">TE</option>{['A', 'B', 'C'].map(n => <option key={n}>{n}</option>)}</select></div>
+            : <div className="flex"><input className="input" style={{ width: 70 }} type="number" placeholder="cells" value={g.cell_count || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, cell_count: +ev.target.value } })} /><input className="input" style={{ width: 70 }} type="number" placeholder="frag %" value={g.fragmentation_pct ?? ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, fragmentation_pct: +ev.target.value } })} /></div>}</td>
+          <td><select className="input" value={g.disposition || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { ...g, disposition: ev.target.value } })}><option value="">—</option>{['fresh_transfer', 'frozen', 'discarded'].map(n => <option key={n}>{n}</option>)}</select></td>
+          <td>{cur ? <b>{cur.grade}</b> : <span className="muted">—</span>} {e.disposition && <Pill s="gray">{e.disposition}</Pill>}</td>
+          <td style={{ textAlign: 'right' }}><button className="btn primary xs" onClick={() => saveGrade(e, dNum)}>{tr(lang, 'Save')}</button> {dNum >= 5 && !e.cryo && <button className="btn ghost xs" onClick={() => freeze(e)}>❄ {tr(lang, 'Freeze')}</button>}
+            <label className="btn ghost xs" style={{ cursor: 'pointer' }}>📷<input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={ev => ev.target.files[0] && upload(ev.target.files[0], dNum, e.embryo_id)} /></label></td></tr>; })}
+          {embryos.length === 0 && <tr><td colSpan="5" className="muted">No embryos yet — record fertilisation on D1.</td></tr>}</tbody></table>
+      {dNum >= 3 && embryos.length > 0 && <div className="flex" style={{ marginTop: 10 }}><span className="muted">{tr(lang, 'Transfer')}:</span>{embryos.filter(e => !e.transfer && !e.cryo).map(e => <label key={e.embryo_id} className="flex"><input type="checkbox" checked={sel.includes(e.embryo_id)} onChange={ev => setSel(ev.target.checked ? [...sel, e.embryo_id] : sel.filter(x => x !== e.embryo_id))} />{e.embryo_code}</label>)}
+        <button className="btn ruby sm" disabled={!sel.length} onClick={() => transfer(sel)}>Record transfer ({sel.length})</button></div>}</div>}
+    {day === 'Summary' && <div className="card"><h2>{tr(lang, 'Summary')} table</h2><table className="t"><thead><tr><th>#</th><th>Mat.</th><th>Fert.</th><th>Embryo</th>{[2, 3, 4, 5, 6, 7].map(d => <th key={d}>D{d}</th>)}<th>Fate</th><th>PGT</th></tr></thead>
+      <tbody>{o.table.map((x, i) => <tr key={i}><td>{x.oocyte_number}</td><td>{x.maturity}</td><td>{x.fertilization}</td><td>{x.embryo_code}</td>{[2, 3, 4, 5, 6, 7].map(d => <td key={d}>{x.days && x.days[d] ? x.days[d].grade : ''}</td>)}<td>{x.disposition}{x.transfer ? ' · ET' : ''}{x.cryo ? ` · ${x.cryo.tank_id || ''}/${x.cryo.canister || ''}/${x.cryo.goblet || ''}/${x.cryo.position || ''}` : ''}</td><td>{x.pgta}</td></tr>)}</tbody></table>
+      <div className="flex" style={{ marginTop: 10 }}>{Object.entries(o.summary).map(([k, v]) => <Pill key={k} s="gray">{k.replace(/_/g, ' ')}: {v ?? '—'}</Pill>)}</div></div>}
+    {day === 'Album' && <div className="card"><h2>{tr(lang, 'Album')} <label className="btn ghost xs right" style={{ cursor: 'pointer' }}>{tr(lang, 'Upload photo')}<input type="file" accept="image/*" style={{ display: 'none' }} onChange={ev => ev.target.files[0] && upload(ev.target.files[0], null, null)} /></label></h2>
+      <div className="flex">{ws.photos.map(p => <div key={p.id} className="center"><img className="thumb" src={`${J}/photos/${p.id}/file?t=${TOKEN()}`} onError={e => e.target.style.opacity = .3} /><div className="muted">D{p.lab_day ?? '-'} {p.caption_en || ''}</div>
+        {p.released_to_patient ? <Pill s="signed">{tr(lang, 'Released')}</Pill> : <button className="btn emerald xs" onClick={() => release([p.id])}>{tr(lang, 'Release to patient')}</button>}</div>)}
+        {ws.photos.length === 0 && <span className="muted">No photos yet. Use the camera button on an embryo row or upload here.</span>}</div></div>}
+    {day === 'Cryo' && <div className="card"><h2>{tr(lang, 'Cryo')} list</h2><table className="t"><thead><tr><th>Embryo</th><th>Grade</th><th>PGT</th><th>Frozen</th><th>Device</th><th>Location</th><th>Status</th></tr></thead>
+      <tbody>{embryos.filter(e => e.cryo).map(e => <tr key={e.embryo_id}><td><b>{e.embryo_code}</b></td><td>{Object.values(e.days).slice(-1)[0]?.grade}</td><td>{e.pgta}</td><td>{fmtDate(e.cryo.freeze_date, lang)}</td><td>{e.cryo.device} {e.cryo.device_label || ''}</td><td>{e.cryo.tank_id}/{e.cryo.canister}/{e.cryo.goblet}/{e.cryo.position}</td><td>{e.warming ? <Pill s="gray">thawed</Pill> : <Pill s="active">stored</Pill>}</td></tr>)}</tbody></table>
+      <div className="hr" /><h2>Storage terms</h2>{ws.cryo_terms.map(t => <div key={t.id} className="flex"><Pill s={t.status}>{t.status}</Pill><span>{t.content_type} × {t.device_count} · paid until <b>{fmtDate(t.paid_until, lang)}</b> · fee {t.annual_fee ?? 0} THB</span></div>)}
+      {ws.cryo_terms.length === 0 && <div className="muted">Storage terms open automatically when embryos are frozen.</div>}</div>}
+    {day === 'PGT' && <div className="card"><h2>PGT results</h2><table className="t"><thead><tr><th>Embryo</th><th>Biopsied</th><th>Result</th><th></th></tr></thead>
+      <tbody>{embryos.map(e => <tr key={e.embryo_id}><td><b>{e.embryo_code}</b></td><td>{e.pgta ? '✓' : ''}</td><td><select className="input" value={grade[e.embryo_id]?.pgta_result || e.pgta || ''} onChange={ev => setGrade({ ...grade, [e.embryo_id]: { pgta_result: ev.target.value } })}><option value="">—</option>{['euploid', 'aneuploid', 'mosaic', 'no result'].map(n => <option key={n}>{n}</option>)}</select></td>
+        <td><button className="btn primary xs" onClick={() => saveGrade(e, Object.keys(e.days).map(Number).sort().slice(-1)[0] || 5)}>{tr(lang, 'Save')}</button></td></tr>)}</tbody></table></div>}
+  </div>;
+}
+
+/* ───────────── Consents ───────────── */
+function Consents({ ws, lang, reload, toast }) {
+  const [signing, setSigning] = useState(null); const [sig, setSig] = useState(null);
+  const sign = async () => { try { await api(`${J}/consents/${signing.id}/sign`, { body: { signature: sig, channel: 'clinic_tablet', signer_patient_id: ws.patient.id } }); toast('Signed'); setSigning(null); setSig(null); reload(); } catch (e) { toast(e.message, true); } };
+  return <div className="card"><h2>{tr(lang, 'Consents')} <span className="tag">gate lab tasks</span></h2>
+    <table className="t"><thead><tr><th>Consent</th><th>{tr(lang, 'Status')}</th><th>Signed</th><th>Channel</th><th></th></tr></thead>
+      <tbody>{ws.consents.map(c => <tr key={c.id}><td><b>{lang === 'th' ? c.title_th : c.title_en}</b><div className="muted">{c.consent_type} v{c.template_version}</div></td><td><Pill s={c.status === 'signed' ? 'signed' : 'blocked'}>{c.status}</Pill></td>
+        <td>{c.signed_at ? fmtDT(c.signed_at, lang) : ''}</td><td>{c.signed_channel || ''}</td>
+        <td style={{ textAlign: 'right' }}>{c.status === 'pending' ? <button className="btn primary xs" onClick={() => setSigning(c)}>✍ {tr(lang, 'Sign')} on tablet</button> : <a className="btn ghost xs" href={`${J}/consents/${c.id}/file`} onClick={async (e) => { e.preventDefault(); openBlob(await api(`${J}/consents/${c.id}/file`)); }}>PDF</a>}</td></tr>)}</tbody></table>
+    <div className="muted" style={{ marginTop: 8 }}>Patients can also sign in the patient app before the visit; the lab to-do unblocks automatically.</div>
+    {signing && <Modal title={(lang === 'th' ? signing.title_th : signing.title_en)} onClose={() => setSigning(null)}>
+      <p className="muted">{nameOf(ws.patient, lang)} · {ws.patient.hn_number}</p><SignaturePad onChange={setSig} />
+      <div className="flex" style={{ marginTop: 12, justifyContent: 'flex-end' }}><button className="btn primary" disabled={!sig} onClick={sign}>{tr(lang, 'Sign')}</button></div></Modal>}
+  </div>;
+}
+
+/* ───────────── Outcome ───────────── */
+function Outcome({ ws, lang, reload, toast }) {
+  const [f, setF] = useState(ws.outcome || { hcg_date: '', hcg_value: '', hcg_positive: null, clinical_pregnancy: null, gestational_sacs: '', fetal_hearts: '', ongoing_pregnancy: null, miscarriage: null, ectopic: null, live_birth: null, delivery_date: '', babies: '', ohss_grade: 'none', cancelled_before_opu: false, notes: '' });
+  const tri = (k, l) => <Field label={l}><select value={f[k] === null || f[k] === undefined ? '' : String(f[k])} onChange={e => setF({ ...f, [k]: e.target.value === '' ? null : e.target.value === 'true' })}><option value="">—</option><option value="true">{tr(lang, 'Positive')} / yes</option><option value="false">{tr(lang, 'Negative')} / no</option></select></Field>;
+  const save = async () => { try { await api(`${J}/cycles/${CID}/outcome`, { body: { ...f, hcg_value: f.hcg_value === '' ? null : f.hcg_value, gestational_sacs: f.gestational_sacs === '' ? null : +f.gestational_sacs, fetal_hearts: f.fetal_hearts === '' ? null : +f.fetal_hearts, babies: f.babies === '' ? null : +f.babies, hcg_date: f.hcg_date || null, delivery_date: f.delivery_date || null } }); toast('Outcome saved · patient notified'); reload(); } catch (e) { toast(e.message, true); } };
+  const report = async () => { openBlob(await api(`${J}/cycles/${CID}/report.pdf`)); };
+  const close = async () => { const reason = prompt('Closure note'); await api(`${J}/cycles/${CID}/close`, { body: { reason } }); reload(); };
+  const cancel = async () => { const reason = prompt('Cancellation reason'); if (!reason) return; await api(`${J}/cycles/${CID}/cancel`, { body: { reason } }); reload(); };
+  return <div className="grid c2">
+    <div className="card"><h2>{tr(lang, 'Outcome')}</h2><div className="grid c2">
+      <Field label={tr(lang, 'hCG date')}><input type="date" value={f.hcg_date || ''} onChange={e => setF({ ...f, hcg_date: e.target.value })} /></Field>
+      <Field label={tr(lang, 'hCG value')}><input type="number" value={f.hcg_value ?? ''} onChange={e => setF({ ...f, hcg_value: e.target.value })} /></Field>
+      {tri('hcg_positive', 'hCG')}{tri('clinical_pregnancy', tr(lang, 'Clinical pregnancy'))}
+      <Field label="Gestational sacs"><input type="number" value={f.gestational_sacs ?? ''} onChange={e => setF({ ...f, gestational_sacs: e.target.value })} /></Field>
+      <Field label={tr(lang, 'Fetal hearts')}><input type="number" value={f.fetal_hearts ?? ''} onChange={e => setF({ ...f, fetal_hearts: e.target.value })} /></Field>
+      {tri('ongoing_pregnancy', tr(lang, 'Ongoing pregnancy'))}{tri('miscarriage', tr(lang, 'Miscarriage'))}{tri('ectopic', tr(lang, 'Ectopic'))}{tri('live_birth', tr(lang, 'Live birth'))}
+      <Field label="Delivery date"><input type="date" value={f.delivery_date || ''} onChange={e => setF({ ...f, delivery_date: e.target.value })} /></Field>
+      <Field label="Babies"><input type="number" value={f.babies ?? ''} onChange={e => setF({ ...f, babies: e.target.value })} /></Field>
+      <Field label={tr(lang, 'OHSS')}><select value={f.ohss_grade || 'none'} onChange={e => setF({ ...f, ohss_grade: e.target.value })}>{['none', 'mild', 'moderate', 'severe'].map(x => <option key={x}>{x}</option>)}</select></Field>
+      <label className="flex muted" style={{ alignSelf: 'end' }}><input type="checkbox" checked={!!f.cancelled_before_opu} onChange={e => setF({ ...f, cancelled_before_opu: e.target.checked })} /> {tr(lang, 'Cancelled before OPU')}</label>
+    </div><Field label={tr(lang, 'Notes')}><textarea rows="2" value={f.notes || ''} onChange={e => setF({ ...f, notes: e.target.value })} /></Field>
+      <div className="flex" style={{ marginTop: 12 }}><button className="btn primary" onClick={save}>{tr(lang, 'Save')}</button><button className="btn ghost" onClick={report}>📄 {tr(lang, 'Cycle report')}</button><span className="right" /><button className="btn ghost" onClick={close}>{tr(lang, 'Close')} cycle</button><button className="btn ruby" onClick={cancel}>{tr(lang, 'Cancel')} cycle</button></div></div>
+    <div className="card ink"><h2>Report preview</h2><div className="kv">{Object.entries(ws.observation.summary).map(([k, v]) => <React.Fragment key={k}><div>{k.replace(/_/g, ' ')}</div><div><b>{v ?? '—'}</b></div></React.Fragment>)}</div>
+      <div className="hr" style={{ background: 'rgba(255,255,255,.15)' }} /><div className="muted">Success rates vary with age and individual medical factors. The report states this on every copy.</div></div>
+  </div>;
+}
+
+/* ───────────── Events ───────────── */
+function Events({ ws, lang }) {
+  return <div className="card"><h2>{tr(lang, 'Events')} <span className="tag">domain event log</span></h2><table className="t"><thead><tr><th>When</th><th>Event</th><th>Payload</th><th>Handlers</th></tr></thead>
+    <tbody>{ws.events.map(e => <tr key={e.id}><td style={{ whiteSpace: 'nowrap' }}>{fmtDT(e.created_at, lang)}</td><td><b>{e.type}</b></td><td className="muted" style={{ fontSize: 12 }}>{JSON.stringify(e.payload).slice(0, 140)}</td><td className="muted" style={{ fontSize: 12 }}>{Object.entries(e.handlers || {}).map(([k, v]) => <div key={k}>{k}: {v}</div>)}</td></tr>)}</tbody></table>
+    <div className="hr" /><h2>{tr(lang, 'Scan record')}</h2><table className="t"><thead><tr><th>When</th><th>Step</th><th>Result</th><th>Witness</th><th>Scans</th></tr></thead>
+      <tbody>{ws.scan_record.map(s => <tr key={s.id}><td>{fmtDT(s.started_at, lang)}</td><td>D{s.lab_day} {s.task_key}</td><td><Pill s={s.result}>{s.result}</Pill></td><td>{s.witness}</td><td className="muted" style={{ fontSize: 12 }}>{s.scans.map(x => `${x.item_type || '?'}:${x.matched ? '✓' : '✗'}`).join(' · ')}</td></tr>)}</tbody></table></div>;
+}
+
+function App() {
+  const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
+  const [ws, setWs] = useState(null); const [tab, setTab] = useState(new URLSearchParams(location.search).get('tab') || 'Overview'); const [editHdr, setEditHdr] = useState(false); const [hdr, setHdr] = useState({});
+  const reload = useCallback(() => api(`${J}/cycles/${CID}`).then(setWs).catch(e => toast(e.message, true)), []);
+  useEffect(() => { reload(); }, []);
+  if (!ws) return <Shell active="/cycles" lang={lang} setLang={setLang} title="…"><div className="muted">Loading…</div><Toast msg={toastMsg} /></Shell>;
+  const c = ws.cycle;
+  const saveHdr = async () => { try { await api(`${J}/cycles/${CID}`, { method: 'PATCH', body: hdr }); setEditHdr(false); reload(); } catch (e) { toast(e.message, true); } };
+  const Comp = { 'Overview': Overview, 'Stimulation chart': Chart, 'Monitoring': Monitoring, 'Schedule & tasks': Schedule, 'Observation': Observation, 'Consents': Consents, 'Outcome': Outcome, 'Events': Events }[tab];
+  return <Shell active="/cycles" lang={lang} setLang={setLang}
+    title={<span>{nameOf(ws.patient, lang)} <span className="muted" style={{ fontWeight: 400, fontSize: 15 }}>{ws.patient.hn_number} · {ws.patient.age} y{ws.partner ? ` · partner ${nameOf(ws.partner, lang)}` : ''}</span></span>}
+    actions={<><span className="tag gold">{c.cycle_number}</span><span className="tag">{c.package ? (lang === 'th' ? c.package.name_th || c.package.name_en : c.package.name_en) : c.cycle_type}</span><Pill s={c.status === 'cancelled' ? 'failed' : (c.status === 'closed' ? 'gray' : 'active')}>{c.status}</Pill>
+      {c.errors_count > 0 && <Pill s="failed">⚠ {c.errors_count} witness error(s)</Pill>}
+      <button className="btn ghost sm" onClick={() => { setHdr({ medication_start_date: c.medication_start_date || '', physician_order: c.physician_order || '', planned_et_day: c.planned_et_day ?? '', registry_report_status: c.registry_report_status, notes: c.notes || '' }); setEditHdr(true); }}>✎ Edit</button>
+      <button className="btn ghost sm" onClick={async () => openBlob(await api(`${J}/cycles/${CID}/report.pdf`))}>📄 {tr(lang, 'Cycle report')}</button></>}>
+    <div className="tabs">{TABS.map(t => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{tr(lang, t)}</button>)}</div>
+    <Comp ws={ws} lang={lang} reload={reload} toast={toast} />
+    {editHdr && <Modal title="Edit cycle" onClose={() => setEditHdr(false)}><div className="grid c2">
+      <Field label={tr(lang, 'Medication start')}><input type="date" value={hdr.medication_start_date} onChange={e => setHdr({ ...hdr, medication_start_date: e.target.value })} /></Field>
+      <Field label={tr(lang, 'Physician order')}><input value={hdr.physician_order} onChange={e => setHdr({ ...hdr, physician_order: e.target.value })} /></Field>
+      <Field label="Planned ET day (3 / 5 / blank = freeze-all)"><input type="number" value={hdr.planned_et_day} onChange={e => setHdr({ ...hdr, planned_et_day: e.target.value === '' ? null : +e.target.value })} /></Field>
+      <Field label="Registry report status"><select value={hdr.registry_report_status} onChange={e => setHdr({ ...hdr, registry_report_status: e.target.value })}>{['not_required', 'pending', 'reported'].map(x => <option key={x}>{x}</option>)}</select></Field></div>
+      <Field label={tr(lang, 'Notes')}><textarea rows="2" value={hdr.notes} onChange={e => setHdr({ ...hdr, notes: e.target.value })} /></Field>
+      <div className="flex" style={{ marginTop: 12, justifyContent: 'flex-end' }}><button className="btn primary" onClick={saveHdr}>{tr(lang, 'Save')}</button></div></Modal>}
+    <Toast msg={toastMsg} />
+  </Shell>;
+}
+ReactDOM.render(<App />, document.getElementById('root'));
+</script></body></html>

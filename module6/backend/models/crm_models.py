@@ -64,6 +64,11 @@ class Appointment(Base):
     cancel_reason     = Column(Text)
     # Rescheduled from
     rescheduled_from  = Column(UUID, ForeignKey("appointments.id"))
+    # Journey layer (j1_001): cycle link + Google Calendar mirror
+    cycle_id          = Column(UUID, ForeignKey("treatment_cycles.id", ondelete="SET NULL"))
+    google_event_id   = Column(String(120))
+    google_synced_at  = Column(DateTime(timezone=True))
+    queue_number      = Column(Integer)                 # assigned at check-in, shown on the OPD board / patient app
     # Audit
     created_by        = Column(UUID, ForeignKey("users.id"))
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
