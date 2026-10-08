@@ -2,6 +2,8 @@
 # FCMS — start the system on this Mac and open the login page.
 # Double-click in Finder, or:  bash "scripts/mac/start.command"     (Ctrl-C in this window stops it)
 cd "$(dirname "$0")/../.."
+# run Homebrew without questions or auto-updates (a HOMEBREW_ASK setting in the shell profile would otherwise stop the script)
+unset HOMEBREW_ASK; export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1
 for p in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$p" ] && eval "$("$p" shellenv)" && break; done
 [ -x .venv/bin/python ] || { echo "Run scripts/mac/setup.command first."; read -r -p "Press Enter to close…" _; exit 1; }
 PG="$(brew --prefix postgresql@16)/bin"

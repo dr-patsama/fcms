@@ -7,6 +7,8 @@
 # and the default treatment packages. Then start the system with scripts/mac/start.command.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# run Homebrew without questions or auto-updates (a HOMEBREW_ASK setting in the shell profile would otherwise stop the script)
+unset HOMEBREW_ASK; export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1 NONINTERACTIVE=1
 REPO="$(pwd)"
 log() { printf '\n\033[1;35m▶ %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m✖ %s\033[0m\n' "$*"; read -r -p "Press Enter to close…" _; exit 1; }
