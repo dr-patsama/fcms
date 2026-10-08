@@ -39,12 +39,18 @@ for i in $(seq 1 40); do "$PG/pg_isready" -q >/dev/null 2>&1 && break; sleep 1; 
 "$PG/pg_isready" -q || fail "PostgreSQL did not start. Try: brew services restart postgresql@16"
 
 # ── 3. Database and user ──────────────────────────────────────────────────────
-log "Creating database fcms_db and user fcms_user"
+# The database name comes from an existing .env (DATABASE_URL=...../<name>); default fcms_db.
+DBNAME=fcms_db
+if [ -f .env ]; then
+  _url="$(sed -n 's/^DATABASE_URL=//p' .env | head -1)"
+  [ -n "$_url" ] && DBNAME="${_url##*/}"
+fi
+log "Creating database $DBNAME and user fcms_user"
 "$PG/psql" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='fcms_user'" | grep -q 1 \
   || "$PG/psql" -d postgres -qc "CREATE ROLE fcms_user LOGIN PASSWORD 'fcms_pass' CREATEDB"
-"$PG/psql" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='fcms_db'" | grep -q 1 \
-  || "$PG/createdb" -O fcms_user fcms_db
-"$PG/psql" -d fcms_db -qc "CREATE EXTENSION IF NOT EXISTS pgcrypto" || true
+"$PG/psql" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DBNAME'" | grep -q 1 \
+  || "$PG/createdb" -O fcms_user "$DBNAME"
+"$PG/psql" -d "$DBNAME" -qc "CREATE EXTENSION IF NOT EXISTS pgcrypto" || true
 
 # ── 4. Python environment ─────────────────────────────────────────────────────
 log "Python packages (.venv)"
@@ -77,6 +83,15 @@ fi
 
 # ── 6. Migrations + seed ──────────────────────────────────────────────────────
 export PYTHONPATH=.
+# A database created by an older/other FCMS version carries a migration id this code does not know.
+# Never touch its data: stop and let the person decide.
+CUR="$("$PG/psql" -d "$DBNAME" -tAc "SELECT version_num FROM alembic_version" 2>/dev/null | head -1 || true)"
+if [ -n "$CUR" ] && ! grep -rqs "\"$CUR\"" module*/migrations journey/migrations; then
+  fail "Database '$DBNAME' was made by a different version of FCMS (migration id $CUR is unknown to this code).
+   Its data was left untouched. Either point .env at a new database, e.g.
+     DATABASE_URL=postgresql://fcms_user:fcms_pass@localhost:5432/${DBNAME}_v2
+   and run this file again, or — only if it holds no real data — remove it with:  dropdb $DBNAME"
+fi
 log "Database migrations (alembic upgrade head)"
 alembic upgrade head
 log "Seeding admin + one demo login per role"

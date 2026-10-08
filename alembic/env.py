@@ -22,9 +22,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# DATABASE_URL env var overrides alembic.ini value (required in production)
-db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
-config.set_main_option("sqlalchemy.url", db_url)
+# DATABASE_URL: environment variable first, then the repo .env (same source the app uses), then alembic.ini
+from module1.backend.core.config import settings  # noqa: E402  (reads .env)
+db_url = os.environ.get("DATABASE_URL") or settings.DATABASE_URL or config.get_main_option("sqlalchemy.url")
+config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # ── Import Base ───────────────────────────────────────────
 from module1.backend.core.database import Base  # noqa: E402

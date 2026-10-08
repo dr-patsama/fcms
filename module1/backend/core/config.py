@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"   # .env also carries journey-layer keys (CLINIC_*, PORTAL_BASE_URL, LINE_*, ...) read by JourneySettings
 
     def __init__(self, **kw):
         super().__init__(**kw)
