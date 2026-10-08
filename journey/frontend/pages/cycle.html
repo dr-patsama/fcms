@@ -64,12 +64,12 @@ function Chart({ ws, lang, reload, toast, hp }) {
     {!start && <div className="card" style={{ background: '#FFF7D6' }}>Set the medication start date (Overview → edit) before publishing.</div>}
     <div className="chart card" style={{ padding: 8 }}><table>
       <thead><tr><th className="drug">{tr(lang, 'Drug')}</th>{days.map(i => <th key={i} className={(i === d0i ? 'd0 ' : '') + (i === todayI ? 'today' : '')}>
-        <div>S{i}{d0i != null && i >= d0i && i - d0i <= 7 ? ` · D${i - d0i}` : ''}</div><div className="muted" style={{ fontSize: 10.5 }}>{dateOf(i) ? dateOf(i).slice(5) : ''}</div></th>)}</tr></thead>
+        <div>S{i}{d0i != null && i >= d0i && i - d0i <= 7 ? ` · D${i - d0i}` : ''}</div><div className="muted">{dateOf(i) ? dateOf(i).slice(5) : ''}</div></th>)}</tr></thead>
       <tbody>{meds.map(m => <tr key={m.id}><td className="drug"><b>{lang === 'th' ? (m.drug_th || m.drug_en) : m.drug_en}</b><div className="muted">{m.dose} {m.unit} {m.route} {m.slot} <a onClick={() => setEdit(m)} style={{ cursor: 'pointer' }}>✎</a> <a onClick={() => del(m.id)} style={{ cursor: 'pointer', color: 'var(--ruby)' }}>✕</a></div></td>
         {days.map(i => { const dt = dateOf(i); const d = dt && m.doses[dt]; const inRange = i >= m.start_day_index && i <= m.end_day_index;
           return <td key={i} className={d ? 'dose' + (d.taken_at ? ' taken' : '') : (inRange ? 'dose' : '')} onClick={() => d && tick(d)} title={d ? (d.taken_at ? 'taken ' + fmtDT(d.taken_at) : 'click = mark taken') : ''}>{d ? (d.taken_at ? '✓' : d.dose) : (inRange ? m.dose : '')}</td>; })}</tr>)}
         {['e2', 'lh', 'p4', 'endometrium_mm'].map(k => <tr key={k}><td className="drug muted">{k.toUpperCase().replace('_MM', ' (mm)')}</td>{days.map(i => { const mo = monByDate[dateOf(i)]; return <td key={i} className="mon">{mo && mo[k] != null ? mo[k] : ''}</td>; })}</tr>)}
-        <tr><td className="drug muted">Follicles R / L</td>{days.map(i => { const mo = monByDate[dateOf(i)]; return <td key={i} className="mon" style={{ fontSize: 10.5 }}>{mo ? `${(mo.follicles_right || []).join(',')} / ${(mo.follicles_left || []).join(',')}` : ''}</td>; })}</tr>
+        <tr><td className="drug muted">Follicles R / L</td>{days.map(i => { const mo = monByDate[dateOf(i)]; return <td key={i} className="mon">{mo ? `${(mo.follicles_right || []).join(',')} / ${(mo.follicles_left || []).join(',')}` : ''}</td>; })}</tr>
       </tbody></table></div>
     {edit && <Modal title={edit.id ? 'Edit medication' : tr(lang, 'Add medication')} onClose={() => setEdit(null)}>
       <div className="grid c2">

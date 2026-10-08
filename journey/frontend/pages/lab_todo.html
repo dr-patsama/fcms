@@ -2,6 +2,19 @@
 <html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lab To-Do — LIFE by Dr. Pat</title>
 <link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
+<style>
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;align-items:start}
+.col{background:#F1EAE0;border-radius:8px;padding:8px}
+.colhead{display:flex;align-items:center;gap:8px;padding:4px 6px 8px;font-size:15.5px;color:var(--ink)}
+.colhead .count{background:var(--sapphire-deep);color:#fff;border-radius:999px;padding:1px 9px;font-size:13px;font-weight:700}
+.tcard{background:#fff;border:1px solid #D9CFC2;border-left:5px solid var(--sapphire);border-radius:6px;padding:9px 10px;margin-bottom:8px;font-size:14.5px}
+.tcard.done{border-left-color:var(--emerald);opacity:.8}.tcard.blocked{border-left-color:#E0A800;background:#FFF9EA}.tcard.failed{border-left-color:var(--ruby)}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.trow .time{font-size:16px;color:var(--ink)}
+.tname{font-size:15.5px;margin:4px 0 2px;color:var(--ink)}
+.items{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.item{background:#ECE4D9;color:#2A1720;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}
+.tcard .muted{font-size:13px}
+</style>
 <script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
 <script type="text/babel" src="/journey/static/journey-shared.js"></script>
 </head><body><div id="root"></div>
@@ -25,18 +38,42 @@ function App() {
   const resolve = async (i) => { const resolution = prompt('Resolution'); if (!resolution) return; await api(`${J}/lab/incidents/${i.id}/resolve`, { body: { resolution } }); load(); };
   const toggle = (id) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   const counts = { pending: data.tasks.filter(t => t.effective_status === 'pending').length, blocked: data.tasks.filter(t => t.effective_status === 'blocked').length, done: data.tasks.filter(t => t.status === 'done').length, witness: data.tasks.filter(t => t.requires_witness && t.status === 'pending').length };
+  const [view, setView] = useState(localStorage.getItem('fcms_lab_view') || 'board'); const [showInc, setShowInc] = useState(false);
+  const setV = (v) => { localStorage.setItem('fcms_lab_view', v); setView(v); };
+  const Card = ({ t }) => <div className={'tcard ' + t.effective_status}>
+    <div className="trow"><b className="time">{t.scheduled_time ? t.scheduled_time.slice(0, 5) : '—'}</b><span className="tag ruby">D{t.lab_day}</span>{days > 1 && <span className="muted">{fmtDate(t.scheduled_date, lang)}</span>}<input type="checkbox" className="right" checked={sel.includes(t.id)} onChange={() => toggle(t.id)} title="select for labels" /></div>
+    <div className="tname"><b>{t.hn}</b> {nameOf(t, lang)}</div>
+    {t.partner_en && <div className="muted">{tr(lang, 'Partner')}: {t.partner_en}</div>}
+    <div className="muted"><a href={'/cycles/' + t.cycle_id}>{t.cycle_number}</a> · {t.physician_order || t.cycle_type}</div>
+    <div className="items">{(t.items_required || []).map(i => <span key={i} className="item">{i.replace(/_/g, ' ')}</span>)}</div>
+    <div className="trow"><Pill s={t.effective_status}>{tr(lang, t.effective_status.charAt(0).toUpperCase() + t.effective_status.slice(1))}</Pill>
+      {t.blocked_by_consent.length > 0 && <span className="muted" style={{ fontSize: 12.5 }}>{t.blocked_by_consent.join(', ')}</span>}
+      <span className="right" />
+      {t.status === 'pending' && <>{t.requires_witness ? <a className="btn emerald xs" href={`/lab/witness?task=${t.id}`}>▣ {tr(lang, 'Witness')}</a> : <button className="btn emerald xs" onClick={() => done(t)}>✓ {tr(lang, 'Done')}</button>}<button className="btn ghost xs" onClick={() => fail(t)}>✕</button></>}
+      {t.status === 'done' && <span className="muted">{fmtDT(t.done_at, lang).slice(-5)}</span>}</div>
+  </div>;
   return <Shell active="/lab/todo" lang={lang} setLang={setLang} title={tr(lang, 'Lab To-Do')}
     actions={<><button className="btn ghost sm" onClick={() => setDate(addDays(date, -1))}>‹</button><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /><button className="btn ghost sm" onClick={() => setDate(addDays(date, 1))}>›</button>
       <button className="btn ghost sm" onClick={() => setDate(todayISO())}>{tr(lang, 'Today')}</button>
       <select className="input" value={days} onChange={e => setDays(+e.target.value)}><option value={1}>1 day</option><option value={3}>3 days</option><option value={7}>7 days</option></select>
-      <input className="input" placeholder={tr(lang, 'Search') + ' HN / name'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 200 }} />
+      <input className="input" placeholder={tr(lang, 'Search') + ' HN / name'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 180 }} />
+      <div className="lang"><button className={view === 'board' ? 'on' : ''} onClick={() => setV('board')}>board</button><button className={view === 'list' ? 'on' : ''} onClick={() => setV('list')}>list</button></div>
       <button className="btn primary sm" disabled={!sel.length} onClick={() => print(sel)}>🖨 {tr(lang, 'Print labels')} ({sel.length})</button>
-      <button className="btn ghost sm" disabled={!sel.length} onClick={() => print(sel, ['cryo_device'])}>🖨 Cryo labels</button></>}>
-    <div className="daytabs">{['', 0, 1, 2, 3, 4, 5, 6, 7].map(d => <button key={d} className={labDay === d ? 'on' : ''} onClick={() => setLabDay(d)}>{d === '' ? tr(lang, 'All') : 'D' + d}</button>)}
-      <span className="right" /><div className="lang"><button className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>open</button><button className={show === 'closed' ? 'on' : ''} onClick={() => setShow('closed')}>done</button><button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>all</button></div></div>
-    <div className="grid c4" style={{ marginBottom: 14 }}><Stat label={tr(lang, 'Pending')} value={counts.pending} ink /><Stat label="Needs witness" value={counts.witness} /><Stat label={tr(lang, 'Blocked')} value={counts.blocked} small="unsigned consents" /><Stat label={tr(lang, 'Done')} value={counts.done} /></div>
-    {incidents.length > 0 && <div className="card" style={{ borderColor: 'var(--ruby)' }}><h2 style={{ color: 'var(--ruby)' }}>⚠ {tr(lang, 'Incidents')} ({incidents.length})</h2>{incidents.map(i => <div key={i.id} className="flex" style={{ marginBottom: 6 }}><Pill s="failed">{i.severity}</Pill><span style={{ flex: 1 }}>{i.description}</span><span className="muted">{fmtDT(i.created_at, lang)}</span><button className="btn ghost xs" onClick={() => resolve(i)}>Resolve</button></div>)}</div>}
-    {groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="card"><h2>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')} <Pill s="gray">{vis.length}</Pill>
+      <button className="btn ghost sm" disabled={!sel.length} onClick={() => print(sel, ['cryo_device'])}>🖨 Cryo</button></>}>
+    <div className="flex" style={{ marginBottom: 12 }}>
+      <div className="daytabs" style={{ margin: 0 }}>{['', 0, 1, 2, 3, 4, 5, 6, 7].map(d => <button key={d} className={labDay === d ? 'on' : ''} onClick={() => setLabDay(d)}>{d === '' ? tr(lang, 'All') : 'D' + d}</button>)}</div>
+      <div className="lang"><button className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>open</button><button className={show === 'closed' ? 'on' : ''} onClick={() => setShow('closed')}>done</button><button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>all</button></div>
+      <span className="right" />
+      <span className="pill pending">{counts.pending} {tr(lang, 'Pending')}</span><span className="pill done">{counts.witness} need witness</span><span className="pill blocked">{counts.blocked} {tr(lang, 'Blocked')}</span><span className="pill gray">{counts.done} {tr(lang, 'Done')}</span>
+      {incidents.length > 0 && <button className="pill failed" style={{ border: 0, cursor: 'pointer' }} onClick={() => setShowInc(!showInc)}>⚠ {incidents.length} {tr(lang, 'Incidents')} {showInc ? '▴' : '▾'}</button>}
+    </div>
+    {showInc && incidents.length > 0 && <div className="card" style={{ borderColor: 'var(--ruby)', marginBottom: 12 }}>{incidents.map(i => <div key={i.id} className="flex" style={{ marginBottom: 6 }}><Pill s="failed">{i.severity}</Pill><span style={{ flex: 1 }}>{i.description}</span><span className="muted">{fmtDT(i.created_at, lang)}</span><button className="btn ghost xs" onClick={() => resolve(i)}>Resolve</button></div>)}</div>}
+    {view === 'board' && <div className="board">
+      {groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="col">
+        <div className="colhead"><b>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')}</b><span className="count">{vis.length}</span><button className="btn ghost xs right" onClick={() => print(vis.map(t => t.id))} title="print labels for this column">🖨</button></div>
+        {vis.map(t => <Card key={t.id} t={t} />)}</div>; })}
+    </div>}
+    {view === 'list' && groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="card"><h2>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')} <Pill s="gray">{vis.length}</Pill>
       <button className="btn ghost xs right" onClick={() => print(vis.map(t => t.id))}>🖨 labels</button></h2>
       <table className="t"><thead><tr><th style={{ width: 30 }}></th><th>{tr(lang, 'Time')}</th><th>{tr(lang, 'Patient')}</th><th>Day</th><th>Cycle · order</th><th>Items</th><th>{tr(lang, 'Status')}</th><th></th></tr></thead>
         <tbody>{vis.map(t => <tr key={t.id}><td><input type="checkbox" checked={sel.includes(t.id)} onChange={() => toggle(t.id)} /></td>
