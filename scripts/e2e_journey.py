@@ -111,6 +111,25 @@ check("OPU blocked by unsigned consents", opu_task["effective_status"] == "block
 r = c.get("/api/v1/journey/lab/tasks", params={"on": str(d0)}, headers=H)
 check("lab to-do for the day", r.status_code == 200 and "opu" in r.json()["groups"], list(j(r).get("groups", {}).keys()) if r.status_code == 200 else j(r))
 
+print("── assignees: who does each step")
+r = c.get("/api/v1/journey/lab/staff", headers=H)
+staff = r.json() if r.status_code == 200 else []
+check("assignable lab staff listed", r.status_code == 200 and any(s["role"] == "embryologist" for s in staff), [s["role"] for s in staff])
+embryologist = next(s for s in staff if s["role"] == "embryologist")
+r = c.post(f"/api/v1/journey/lab/tasks/{opu_task['id']}/assign", json={"user_id": embryologist["id"]}, headers=H)
+check("task assigned → assignee on the card", r.status_code == 200 and (r.json().get("assignee") or {}).get("id") == embryologist["id"], j(r))
+d0_ids = [t["id"] for t in tasks if t["lab_day"] == 0]
+r = c.post("/api/v1/journey/lab/tasks/assign", json={"task_ids": d0_ids, "user_id": embryologist["id"]}, headers=H)
+check("whole column assigned at once", r.status_code == 200 and r.json()["assigned"] == len(d0_ids) and all(t["assignee"] for t in r.json()["tasks"]), j(r))
+r = c.get("/api/v1/journey/lab/tasks", params={"on": str(d0), "assignee": embryologist["id"]}, headers=H)
+check("board filters by assignee", r.status_code == 200 and r.json()["count"] >= len(d0_ids) and all((t["assignee"] or {}).get("id") == embryologist["id"] for t in r.json()["tasks"]), j(r).get("count"))
+r = c.post(f"/api/v1/journey/lab/tasks/{opu_task['id']}/assign", json={"me": True}, headers=HP)
+check("assign to me (physician)", r.status_code == 200 and (r.json().get("assignee") or {}).get("role") == "physician", j(r))
+r = c.post(f"/api/v1/journey/lab/tasks/{opu_task['id']}/assign", json={"user_id": embryologist["id"]}, headers=H)
+ws = c.get(f"/api/v1/journey/cycles/{CID}", headers=H).json()
+check("assignee visible in cycle workspace", any((t.get("assignee") or {}).get("id") == embryologist["id"] for t in ws["tasks"]))
+check("lab.task.assigned event recorded", any(e["type"] == "lab.task.assigned" for e in ws["events"]))
+
 print("── consent gating: witness refused until signed, then sign in clinic")
 r = c.post(f"/api/v1/journey/lab/tasks/{opu_task['id']}/witness/start", headers=H)
 check("witness start refused (consent)", r.status_code == 409, r.status_code)

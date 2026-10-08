@@ -20,11 +20,11 @@ package  →  cycle  →  stimulation chart  →  publish (patient calendar + do
 |---|---|---|
 | `/cycles` | physician, nurse | cycle list · create a cycle from a package |
 | `/cycles/{id}` | clinical | workspace: overview · stimulation chart · monitoring · schedule & lab tasks · observation (OPU, D0–D7, summary, album, cryo, PGT) · consents (tablet e-sign) · outcome · events & scan record |
-| `/lab/todo` | lab | generated to-do list by day and step · consent gating · QR label printing · incidents |
+| `/lab/todo` | lab | column board, one column per step with large headings · every card shows who is assigned (assign one card, a whole column, or all unassigned; filter by person) · consent gating · QR label printing · incidents |
 | `/lab/witness` | lab (tablet) | electronic witnessing: camera or USB scanner · MATCH / MISMATCH · manual double-witness |
 | `/desk` | front desk | today's queue (check-in, call → patient push) · booking requests from the app · cryo renewals · broadcast · connection status · Google Calendar sync |
 | `/admin/packages` | physician/admin | package templates (medications, lab events, witness points, consents, billing) · consent templates |
-| `/insight` | clinical | KPIs (laboratory = Vienna consensus, clinical = Maribor consensus, operational) · monthly series · Excel export |
+| `/insight` | clinical | KPIs with competence and benchmark levels (laboratory = Vienna consensus 2017, clinical = Maribor consensus 2021, operational = clinic targets) · a monthly bar/line chart per indicator with dashed competence and solid benchmark lines, bars coloured below-competence / competent / benchmark · Excel export with the levels |
 | `/portal` | patients | LINE Mini App / PWA: today's doses with "taken" ticks · calendar · trigger · queue · results · album · consents · cryo & PromptPay · notifications · booking request |
 
 API: `/api/v1/journey/*` (staff, JWT) and `/api/v1/portal/*` (patients, patient JWT). Swagger at `/docs`.
@@ -33,11 +33,12 @@ API: `/api/v1/journey/*` (staff, JWT) and `/api/v1/portal/*` (patients, patient 
 
 ```bash
 export PYTHONPATH=.
-alembic upgrade head                       # adds j1_001 (19 tables, widens 3 Module 2 columns)
+alembic upgrade head                       # adds j1_001 (19 tables, widens 3 Module 2 columns) and j1_002 (lab task assignee)
 python seed_admin.py --all
 uvicorn app.main:app --port 8000
 # then in the UI: /admin/packages → "Seed defaults"  (or POST /api/v1/journey/packages/seed)
-PYTHONPATH=. python scripts/e2e_journey.py  # full scenario against the live DB (70 checks)
+PYTHONPATH=. python scripts/e2e_journey.py  # full scenario against the live DB (77 checks)
+PYTHONPATH=. python scripts/seed_kpi_demo.py # DEMO ONLY: 12 months of invented embryology history so /insight has curves (--reset removes it)
 ```
 
 Scheduled housekeeping — call once a day (Synology Task Scheduler / cron / launchd on the Mac mini):
@@ -73,6 +74,8 @@ Python packages added: `qrcode[pil]`, `google-api-python-client`, `google-auth`,
 * **Consent gating**: a lab task whose required consents are unsigned is `blocked` — it cannot be done or witnessed until the patient signs (tablet or app).
 * **Events**: every handoff is a `cycle_events` row; handlers (`services/handlers.py`) are isolated so a failed push never breaks a clinical save.
 * **PDPA**: Google Calendar titles carry only type + HN + first name; the patient API exposes only released/verified content; all actions audit-log.
+* **KPI levels**: `kpi.BENCHMARKS` holds the competence / benchmark value, direction (higher- or lower-is-better) and source for every indicator — Vienna consensus 2017 (ESHRE/Alpha) for the laboratory, Maribor consensus 2021 (ESHRE) for clinical PIs. Indicators without a published value (clinical pregnancy rate, live birth, hCG positive, miscarriage, ectopic, adherence) are marked "local" and left empty until the clinic sets its own target in that dict. Monthly series anchor laboratory indicators on the OPU date so numerators and denominators share a cohort.
+* **Lab assignee**: every lab task carries `assigned_to` (+ `assigned_at`, `assigned_by`); `POST /lab/tasks/{id}/assign`, bulk `POST /lab/tasks/assign`, staff from `GET /lab/staff` (embryologist, lab supervisor/technician, nurse, physician). Assigning emits `lab.task.assigned`.
 * No AI chatbot. "Virtual consultation" wording. EN/TH everywhere. Buddhist-calendar dates on labels/PDFs.
 
 ## Files
@@ -89,12 +92,12 @@ journey/
 │   ├── consents.py      e-sign + PDF       ├── report.py     cycle report PDF
 │   ├── cryo.py          storage terms ↔ invoices ↔ reminders
 │   ├── notifications.py LINE/SMS/e-mail/WhatsApp + templates
-│   ├── calendar_sync.py Google Calendar    ├── kpi.py        Vienna/Maribor indicators
+│   ├── calendar_sync.py Google Calendar    ├── kpi.py        Vienna/Maribor indicators + competence/benchmark levels
 │   ├── portal_auth.py   LINE Login / OTP   ├── promptpay.py  EMVCo QR
 │   └── crm_hooks.py     Module 6 → journey
 ├── backend/api/journey_routes.py   staff API
 ├── backend/api/portal_routes.py    patient API
 ├── frontend/pages/*.html           React (in-browser Babel, vendored libs, offline-capable) + journey.css
 ├── frontend/vendor/jsQR.js         camera QR decoding (fallback when BarcodeDetector is absent)
-└── migrations/j1_001_journey_layer.py
+└── migrations/j1_001_journey_layer.py · j1_002_lab_task_assignee.py
 ```

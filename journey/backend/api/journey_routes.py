@@ -415,7 +415,7 @@ def cycle_events(cycle_id: str, db: Session = Depends(get_db), user: User = Depe
 # ═══════════════════════════════════════════════════════════════════════════
 @router.get("/lab/tasks")
 def lab_tasks(on: Optional[str] = None, lab_day: Optional[int] = None, status: Optional[str] = None, cycle_id: Optional[str] = None,
-              q: Optional[str] = None, days: int = 1, db: Session = Depends(get_db), user: User = Depends(require_roles(LAB + ["receptionist"]))):
+              q: Optional[str] = None, assignee: Optional[str] = None, days: int = 1, db: Session = Depends(get_db), user: User = Depends(require_roles(LAB + ["receptionist"]))):
     d = parse_date(on) or today()
     qry = db.query(LabTask).filter(LabTask.scheduled_date >= d, LabTask.scheduled_date < date.fromordinal(d.toordinal() + max(1, days)))
     if lab_day is not None:
@@ -428,14 +428,48 @@ def lab_tasks(on: Optional[str] = None, lab_day: Optional[int] = None, status: O
     cycles = {str(c.id): c for c in db.query(TreatmentCycle).filter(TreatmentCycle.id.in_({t.cycle_id for t in tasks})).all()} if tasks else {}
     pids = {c.patient_id for c in cycles.values()} | {c.partner_id for c in cycles.values() if c.partner_id}
     patients = {str(p.id): p for p in db.query(Patient).filter(Patient.id.in_(pids)).all()} if pids else {}
-    views = [lt.task_view(db, t, cycles[str(t.cycle_id)], patients) for t in tasks]
+    uids = {t.assigned_to for t in tasks if t.assigned_to}
+    users = {str(u.id): u for u in db.query(User).filter(User.id.in_(uids)).all()} if uids else {}
+    views = [lt.task_view(db, t, cycles[str(t.cycle_id)], patients, users) for t in tasks]
     if q:
         ql = q.lower()
         views = [v for v in views if ql in (v.get("hn") or "").lower() or ql in (v.get("patient_en") or "").lower() or ql in (v.get("patient_th") or "")]
+    if assignee:
+        views = [v for v in views if (assignee == "unassigned" and not v.get("assignee")) or (v.get("assignee") or {}).get("id") == assignee]
     groups = {}
     for v in views:
         groups.setdefault(v["task_type"], []).append(v)
     return {"date": str(d), "count": len(views), "groups": groups, "tasks": views}
+
+
+@router.get("/lab/staff")
+def lab_staff(db: Session = Depends(get_db), user: User = Depends(require_roles(LAB + ["receptionist"]))):
+    """Staff who can be assigned a lab step (embryologists, lab supervisors/technicians, nurses, physicians)."""
+    return lt.assignable_staff(db)
+
+
+@router.post("/lab/tasks/assign")
+async def tasks_assign_bulk(request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles(LAB))):
+    """Assign several tasks at once (e.g. a whole column of the board): {task_ids: [...], user_id: <id> | null}."""
+    b = await request.json()
+    ids = b.get("task_ids") or []
+    tasks = db.query(LabTask).filter(LabTask.id.in_(ids)).all() if ids else []
+    for t in tasks:
+        lt.assign(db, t, b.get("user_id"), user.id)
+    db.commit()
+    return {"assigned": len(tasks), "tasks": [lt.task_view(db, t) for t in tasks]}
+
+
+@router.post("/lab/tasks/{task_id}/assign")
+async def task_assign(task_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require_roles(LAB))):
+    """Assign the staff member responsible for this step: {user_id: <id>} — or {user_id: null} to unassign; {me: true} assigns the caller."""
+    t = db.query(LabTask).filter(LabTask.id == task_id).first()
+    if not t:
+        raise HTTPException(404, "Task not found")
+    b = await request.json() if request.headers.get("content-length", "0") not in ("0", "") else {}
+    lt.assign(db, t, str(user.id) if b.get("me") else b.get("user_id"), user.id)
+    db.commit()
+    return lt.task_view(db, t)
 
 
 @router.get("/lab/tasks/{task_id}")
@@ -728,20 +762,32 @@ def kpi_export(start: Optional[str] = None, end: Optional[str] = None, db: Sessi
     ws = wb.active
     ws.title = "KPI"
     ws.append(["Period", k["period"]["start"], k["period"]["end"]])
+    ws.append([])
+    ws.append(["Indicator", "Key", "Value", "Competence", "Benchmark", "Direction", "Status", "Type", "Source", "Note"])
+    bm, labels, status = k.get("benchmarks", {}), k.get("labels", {}), k.get("status", {})
     for section in ("laboratory", "clinical", "operational"):
         ws.append([])
         ws.append([section.upper()])
         for key, val in k[section].items():
             if key == "counts":
                 continue
-            ws.append([key, val])
+            b = bm.get(key, {})
+            ws.append([labels.get(key, key), key, val, b.get("competence"), b.get("benchmark"), b.get("direction"),
+                       status.get(key), b.get("kind"), b.get("source"), b.get("note")])
         ws.append(["counts"] + [f"{a}={b}" for a, b in k[section]["counts"].items()])
+    ws.append([])
+    for ref in k.get("references", []):
+        ws.append(["Reference", ref])
     ws2 = wb.create_sheet("Monthly")
     series = kpi.monthly_series(db, 12)
     if series:
-        ws2.append(list(series[0].keys()))
+        keys = list(series[0].keys())
+        ws2.append([labels.get(x, x) for x in keys])
+        ws2.append(keys)
+        ws2.append(["competence"] + [bm.get(x, {}).get("competence") for x in keys[1:]])
+        ws2.append(["benchmark"] + [bm.get(x, {}).get("benchmark") for x in keys[1:]])
         for r in series:
-            ws2.append(list(r.values()))
+            ws2.append([r.get(x) for x in keys])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

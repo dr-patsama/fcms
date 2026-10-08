@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from module1.backend.models.emr_models import Patient
+from module1.backend.models.user_models import User
 from module2.backend.models.lab_models import TreatmentCycle
 
 from ..models.journey_models import TreatmentPackage, LabTask, LabItem, CycleConsent
@@ -86,12 +87,36 @@ def consent_block(db: Session, t: LabTask) -> list[str]:
     return [c for c in t.required_consents if c not in signed]
 
 
-def task_view(db: Session, t: LabTask, c: TreatmentCycle | None = None, patients: dict | None = None) -> dict:
+# roles that can be assigned a lab step (shown in the assignee picker)
+ASSIGNABLE_ROLES = ("embryologist", "lab_supervisor", "lab_technician", "nurse", "physician")
+
+
+def staff_name(u: User | None, lang: str = "en") -> str | None:
+    if not u:
+        return None
+    if lang == "th" and (u.first_name_th or u.last_name_th):
+        return f"{u.first_name_th or ''} {u.last_name_th or ''}".strip()
+    return f"{u.first_name_en} {u.last_name_en}".strip()
+
+
+def staff_view(u: User) -> dict:
+    return {"id": str(u.id), "name_en": staff_name(u, "en"), "name_th": staff_name(u, "th"), "role": u.role,
+            "initials": "".join(x[0] for x in (u.first_name_en, u.last_name_en) if x).upper()}
+
+
+def assignable_staff(db: Session) -> list[dict]:
+    us = db.query(User).filter(User.is_active.is_(True), User.role.in_(ASSIGNABLE_ROLES)).order_by(User.role, User.first_name_en).all()
+    return [staff_view(u) for u in us]
+
+
+def task_view(db: Session, t: LabTask, c: TreatmentCycle | None = None, patients: dict | None = None, users: dict | None = None) -> dict:
     d = row(t)
     c = c or db.query(TreatmentCycle).filter(TreatmentCycle.id == t.cycle_id).first()
     patients = patients or {}
+    users = users or {}
     p = patients.get(str(c.patient_id)) or db.query(Patient).filter(Patient.id == c.patient_id).first()
     partner = patients.get(str(c.partner_id)) or (db.query(Patient).filter(Patient.id == c.partner_id).first() if c.partner_id else None)
+    a = (users.get(str(t.assigned_to)) or db.query(User).filter(User.id == t.assigned_to).first()) if t.assigned_to else None
     blocked = consent_block(db, t)
     d.update({
         "cycle_number": c.cycle_number, "cycle_type": c.cycle_type, "cycle_status": c.status,
@@ -99,8 +124,26 @@ def task_view(db: Session, t: LabTask, c: TreatmentCycle | None = None, patients
         "partner_hn": partner.hn_number if partner else None, "partner_en": patient_name(partner, "en") if partner else None,
         "dob": str(p.date_of_birth) if p and p.date_of_birth else None,
         "blocked_by_consent": blocked, "effective_status": "blocked" if (blocked and t.status == "pending") else t.status,
+        "assignee": staff_view(a) if a else None,
     })
     return d
+
+
+def assign(db: Session, t: LabTask, user_id: str | None, actor_id) -> LabTask:
+    """Assign (or unassign with user_id=None) the staff member responsible for this step."""
+    if user_id:
+        u = db.query(User).filter(User.id == user_id).first()
+        if not u or not u.is_active:
+            raise HTTPException(404, "Staff member not found / ไม่พบเจ้าหน้าที่")
+        if u.role not in ASSIGNABLE_ROLES and u.role not in ("admin", "it_admin"):
+            raise HTTPException(400, f"Role {u.role} cannot be assigned lab steps")
+        t.assigned_to, t.assigned_at, t.assigned_by = str(u.id), now(), str(actor_id) if actor_id else None
+    else:
+        t.assigned_to, t.assigned_at, t.assigned_by = None, None, None
+    db.flush()
+    events.emit(db, "lab.task.assigned", cycle_id=t.cycle_id, patient_id=t.patient_id, actor_id=actor_id,
+                payload={"task_id": t.id, "key": t.key, "lab_day": t.lab_day, "assigned_to": t.assigned_to})
+    return t
 
 
 def mark_done(db: Session, t: LabTask, actor_id, *, via: str = "manual", notes: str | None = None) -> LabTask:

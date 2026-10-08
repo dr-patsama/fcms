@@ -3,17 +3,37 @@
 <title>Lab To-Do — LIFE by Dr. Pat</title>
 <link rel="stylesheet" href="/design-system/tokens.css"><link rel="stylesheet" href="/journey/static/journey.css">
 <style>
-.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;align-items:start}
-.col{background:#F1EAE0;border-radius:8px;padding:8px}
-.colhead{display:flex;align-items:center;gap:8px;padding:4px 6px 8px;font-size:15.5px;color:var(--ink)}
-.colhead .count{background:var(--sapphire-deep);color:#fff;border-radius:999px;padding:1px 9px;font-size:13px;font-weight:700}
-.tcard{background:#fff;border:1px solid #D9CFC2;border-left:5px solid var(--sapphire);border-radius:6px;padding:9px 10px;margin-bottom:8px;font-size:14.5px}
-.tcard.done{border-left-color:var(--emerald);opacity:.8}.tcard.blocked{border-left-color:#E0A800;background:#FFF9EA}.tcard.failed{border-left-color:var(--ruby)}
-.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.trow .time{font-size:16px;color:var(--ink)}
-.tname{font-size:15.5px;margin:4px 0 2px;color:var(--ink)}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:start}
+.col{background:#F1EAE0;border-radius:10px;padding:0 0 6px;overflow:hidden}
+.colhead{background:var(--sapphire-deep);color:#fff;padding:12px 14px 10px;display:flex;align-items:flex-start;gap:10px}
+.colhead .title{font-size:24px;font-weight:700;line-height:1.05;letter-spacing:.2px;text-transform:uppercase}
+.colhead .sub{font-size:14.5px;font-weight:600;opacity:.9;margin-top:4px}
+.colhead .count{background:#fff;color:var(--sapphire-deep);border-radius:999px;min-width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;font-size:19px;font-weight:700;margin-left:auto;flex:none}
+.coltools{display:flex;gap:6px;padding:6px 8px 2px;align-items:center}
+.coltools .btn.ghost{background:#fff}
+.colbody{padding:0 8px}
+.tcard{background:#fff;border:1px solid #D9CFC2;border-left:6px solid var(--sapphire);border-radius:8px;padding:9px 10px;margin-bottom:8px;font-size:14.5px}
+.tcard.done{border-left-color:var(--emerald);opacity:.85}.tcard.blocked{border-left-color:#E0A800;background:#FFF9EA}.tcard.failed{border-left-color:var(--ruby)}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.trow .time{font-size:18px;color:var(--ink)}
+.tname{font-size:16.5px;margin:6px 0 2px;color:var(--ink)}
 .items{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
 .item{background:#ECE4D9;color:#2A1720;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}
 .tcard .muted{font-size:13px}
+/* assignee */
+.who{display:flex;align-items:center;gap:8px;margin:7px 0 2px;padding:6px 8px;border-radius:8px;background:#EEF6F3;border:1px solid #BFE3D5}
+.who.none{background:#FDF0F5;border-color:#F3B9D0}
+.who .av{width:34px;height:34px;border-radius:50%;background:var(--emerald);color:#fff;font-weight:700;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.who.none .av{background:var(--ruby)}
+.who > div{min-width:0;flex:1}
+.who .nm{font-size:15px;font-weight:700;color:var(--ink);line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.who .rl{font-size:12.5px;font-weight:600;color:#4B3A43;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .btn{margin-left:auto;flex:none}
+.staff{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.staff button{display:flex;align-items:center;gap:10px;border:1.5px solid #D9CFC2;background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer;text-align:left;font-size:15px;font-weight:700;color:var(--ink)}
+.staff button:hover{border-color:var(--sapphire)}.staff button.on{border-color:var(--emerald);background:#EEF6F3}
+.staff .av{width:32px;height:32px;border-radius:50%;background:var(--sapphire-deep);color:#fff;font-size:13px;display:inline-flex;align-items:center;justify-content:center}
+.staff .rl{margin-left:auto;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4B3A43}
+.mycount{font-weight:700}
 </style>
 <script src="/timeline/vendor/react.min.js"></script><script src="/timeline/vendor/react-dom.min.js"></script><script src="/timeline/vendor/babel.min.js"></script>
 <script type="text/babel" src="/journey/static/journey-shared.js"></script>
@@ -21,15 +41,34 @@
 <script type="text/babel">
 requireLogin();
 const J = '/api/v1/journey';
+const myId = (() => { try { const t = sessionStorage.getItem('fcms_token'); const c = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return c.sub || c.user_id || null; } catch (e) { return null; } })();   // the signed-in staff member (JWT sub)
 const GROUP_ORDER = ['opu', 'sperm_collection', 'sperm_prep', 'denudation', 'insemination', 'icsi', 'fert_check', 'cleavage_check', 'blast_check', 'biopsy', 'vitrification', 'oocyte_vitrification', 'warming', 'et', 'iui', 'sperm_freeze', 'semen_analysis', 'procedure'];
+const GROUP_EN = { opu: 'Oocyte retrieval', sperm_collection: 'Sperm collection', sperm_prep: 'Sperm preparation', denudation: 'Denudation', insemination: 'Insemination', icsi: 'ICSI', fert_check: 'Fertilisation check', cleavage_check: 'Cleavage check', blast_check: 'Blastocyst check', biopsy: 'Biopsy', vitrification: 'Vitrification', oocyte_vitrification: 'Oocyte vitrification', warming: 'Warming', et: 'Embryo transfer', iui: 'IUI', sperm_freeze: 'Sperm freeze', semen_analysis: 'Semen analysis', procedure: 'Procedure' };
 const GROUP_TH = { opu: 'เก็บไข่', sperm_collection: 'เก็บน้ำเชื้อ', sperm_prep: 'เตรียมน้ำเชื้อ', denudation: 'ลอกเซลล์', insemination: 'ผสมเชื้อ', icsi: 'ICSI', fert_check: 'ตรวจปฏิสนธิ', cleavage_check: 'ตรวจการแบ่งตัว', blast_check: 'ตรวจบลาสโตซิสต์', biopsy: 'ตัดชิ้นเนื้อ', vitrification: 'แช่แข็ง', oocyte_vitrification: 'แช่แข็งไข่', warming: 'ละลาย', et: 'ย้ายตัวอ่อน', iui: 'IUI', sperm_freeze: 'แช่แข็งน้ำเชื้อ', semen_analysis: 'วิเคราะห์น้ำเชื้อ', procedure: 'หัตถการ' };
+const ROLE_TH = { embryologist: 'นักวิทยาศาสตร์ตัวอ่อน', lab_supervisor: 'หัวหน้าห้องแล็บ', lab_technician: 'เจ้าหน้าที่แล็บ', nurse: 'พยาบาล', physician: 'แพทย์', admin: 'ผู้ดูแลระบบ' };
+const groupTitle = (g, lang) => lang === 'th' ? (GROUP_TH[g] || g) : (GROUP_EN[g] || g.replace(/_/g, ' '));
+const groupSub = (g, lang) => lang === 'th' ? (GROUP_EN[g] || g.replace(/_/g, ' ')) : (GROUP_TH[g] || '');
+const staffName = (s, lang) => s ? (lang === 'th' ? (s.name_th || s.name_en) : s.name_en) : '';
+const roleName = (r, lang) => lang === 'th' ? (ROLE_TH[r] || r) : (r || '').replace(/_/g, ' ');
+
+/* Assignee block on a card: who is responsible for this step; click to assign / change */
+function Who({ t, lang, onPick }) {
+  const a = t.assignee;
+  return <div className={'who' + (a ? '' : ' none')} title={a && a.assigned_at ? a.assigned_at : ''}>
+    <span className="av">{a ? a.initials : '?'}</span>
+    <div><div className="nm">{a ? staffName(a, lang) : (lang === 'th' ? 'ยังไม่มีผู้รับผิดชอบ' : 'Unassigned')}</div><div className="rl">{a ? roleName(a.role, lang) : (lang === 'th' ? 'กดเพื่อมอบหมาย' : 'tap to assign')}</div></div>
+    {t.status === 'pending' && <button className={'btn xs ' + (a ? 'ghost' : 'ruby')} onClick={() => onPick(t)} title={a ? (lang === 'th' ? 'เปลี่ยนผู้รับผิดชอบ' : 'Change assignee') : ''}>{a ? '✎' : (lang === 'th' ? 'มอบหมาย' : 'Assign')}</button>}
+  </div>;
+}
 
 function App() {
   const [lang, setLang] = useLang(); const [toastMsg, toast] = useToast();
-  const [date, setDate] = useState(todayISO()); const [days, setDays] = useState(1); const [labDay, setLabDay] = useState(''); const [q, setQ] = useState(''); const [show, setShow] = useState('open');
-  const [data, setData] = useState({ groups: {}, tasks: [] }); const [sel, setSel] = useState([]); const [incidents, setIncidents] = useState([]);
-  const load = () => Promise.all([api(`${J}/lab/tasks?on=${date}&days=${days}${labDay !== '' ? '&lab_day=' + labDay : ''}${q ? '&q=' + encodeURIComponent(q) : ''}`), api(`${J}/lab/incidents`)]).then(([d, i]) => { setData(d); setIncidents(i); }).catch(e => toast(e.message, true));
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [date, days, labDay, q]);
+  const [date, setDate] = useState(todayISO()); const [days, setDays] = useState(1); const [labDay, setLabDay] = useState(''); const [q, setQ] = useState(''); const [show, setShow] = useState('open'); const [who, setWho] = useState('');
+  const [data, setData] = useState({ groups: {}, tasks: [] }); const [sel, setSel] = useState([]); const [incidents, setIncidents] = useState([]); const [staff, setStaff] = useState([]);
+  const [pick, setPick] = useState(null);   // {tasks:[...], title}
+  const load = () => Promise.all([api(`${J}/lab/tasks?on=${date}&days=${days}${labDay !== '' ? '&lab_day=' + labDay : ''}${q ? '&q=' + encodeURIComponent(q) : ''}${who ? '&assignee=' + who : ''}`), api(`${J}/lab/incidents`)]).then(([d, i]) => { setData(d); setIncidents(i); }).catch(e => toast(e.message, true));
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [date, days, labDay, q, who]);
+  useEffect(() => { api(`${J}/lab/staff`).then(setStaff).catch(() => {}); }, []);
   const visible = (t) => show === 'all' || (show === 'open' ? t.status === 'pending' : t.status !== 'pending');
   const groups = Object.entries(data.groups).sort((a, b) => GROUP_ORDER.indexOf(a[0]) - GROUP_ORDER.indexOf(b[0]));
   const print = async (ids, types) => { try { openBlob(await api(`${J}/labels/print`, { body: { task_ids: ids, item_types: types } })); setSel([]); load(); } catch (e) { toast(e.message, true); } };
@@ -37,7 +76,9 @@ function App() {
   const fail = async (t) => { const reason = prompt('Reason / เหตุผล'); if (!reason) return; await api(`${J}/lab/tasks/${t.id}/failed`, { body: { reason } }); load(); };
   const resolve = async (i) => { const resolution = prompt('Resolution'); if (!resolution) return; await api(`${J}/lab/incidents/${i.id}/resolve`, { body: { resolution } }); load(); };
   const toggle = (id) => setSel(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const counts = { pending: data.tasks.filter(t => t.effective_status === 'pending').length, blocked: data.tasks.filter(t => t.effective_status === 'blocked').length, done: data.tasks.filter(t => t.status === 'done').length, witness: data.tasks.filter(t => t.requires_witness && t.status === 'pending').length };
+  const assign = async (userId) => { try { await api(`${J}/lab/tasks/assign`, { body: { task_ids: pick.tasks.map(t => t.id), user_id: userId } }); setPick(null); load(); toast(userId ? (lang === 'th' ? 'มอบหมายแล้ว' : 'Assigned') : (lang === 'th' ? 'ยกเลิกการมอบหมายแล้ว' : 'Unassigned')); } catch (e) { toast(e.message, true); } };
+  const openTasks = data.tasks.filter(t => t.status === 'pending');
+  const counts = { pending: openTasks.length, blocked: data.tasks.filter(t => t.effective_status === 'blocked').length, done: data.tasks.filter(t => t.status === 'done').length, witness: openTasks.filter(t => t.requires_witness).length, unassigned: openTasks.filter(t => !t.assignee).length };
   const [view, setView] = useState(localStorage.getItem('fcms_lab_view') || 'board'); const [showInc, setShowInc] = useState(false);
   const setV = (v) => { localStorage.setItem('fcms_lab_view', v); setView(v); };
   const Card = ({ t }) => <div className={'tcard ' + t.effective_status}>
@@ -45,6 +86,7 @@ function App() {
     <div className="tname"><b>{t.hn}</b> {nameOf(t, lang)}</div>
     {t.partner_en && <div className="muted">{tr(lang, 'Partner')}: {t.partner_en}</div>}
     <div className="muted"><a href={'/cycles/' + t.cycle_id}>{t.cycle_number}</a> · {t.physician_order || t.cycle_type}</div>
+    <Who t={t} lang={lang} onPick={(task) => setPick({ tasks: [task], title: `${groupTitle(task.task_type, lang)} · ${task.hn}` })} />
     <div className="items">{(t.items_required || []).map(i => <span key={i} className="item">{i.replace(/_/g, ' ')}</span>)}</div>
     <div className="trow"><Pill s={t.effective_status}>{tr(lang, t.effective_status.charAt(0).toUpperCase() + t.effective_status.slice(1))}</Pill>
       {t.blocked_by_consent.length > 0 && <span className="muted" style={{ fontSize: 12.5 }}>{t.blocked_by_consent.join(', ')}</span>}
@@ -56,7 +98,10 @@ function App() {
     actions={<><button className="btn ghost sm" onClick={() => setDate(addDays(date, -1))}>‹</button><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /><button className="btn ghost sm" onClick={() => setDate(addDays(date, 1))}>›</button>
       <button className="btn ghost sm" onClick={() => setDate(todayISO())}>{tr(lang, 'Today')}</button>
       <select className="input" value={days} onChange={e => setDays(+e.target.value)}><option value={1}>1 day</option><option value={3}>3 days</option><option value={7}>7 days</option></select>
-      <input className="input" placeholder={tr(lang, 'Search') + ' HN / name'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 180 }} />
+      <input className="input" placeholder={tr(lang, 'Search') + ' HN / name'} value={q} onChange={e => setQ(e.target.value)} style={{ width: 170 }} />
+      <select className="input" value={who} onChange={e => setWho(e.target.value)} title="filter by assignee">
+        <option value="">{lang === 'th' ? 'ทุกคน' : 'Everyone'}</option><option value="unassigned">{lang === 'th' ? 'ยังไม่มอบหมาย' : 'Unassigned'}</option>
+        {staff.map(s => <option key={s.id} value={s.id}>{staffName(s, lang)}</option>)}</select>
       <div className="lang"><button className={view === 'board' ? 'on' : ''} onClick={() => setV('board')}>board</button><button className={view === 'list' ? 'on' : ''} onClick={() => setV('list')}>list</button></div>
       <button className="btn primary sm" disabled={!sel.length} onClick={() => print(sel)}>🖨 {tr(lang, 'Print labels')} ({sel.length})</button>
       <button className="btn ghost sm" disabled={!sel.length} onClick={() => print(sel, ['cryo_device'])}>🖨 Cryo</button></>}>
@@ -64,27 +109,42 @@ function App() {
       <div className="daytabs" style={{ margin: 0 }}>{['', 0, 1, 2, 3, 4, 5, 6, 7].map(d => <button key={d} className={labDay === d ? 'on' : ''} onClick={() => setLabDay(d)}>{d === '' ? tr(lang, 'All') : 'D' + d}</button>)}</div>
       <div className="lang"><button className={show === 'open' ? 'on' : ''} onClick={() => setShow('open')}>open</button><button className={show === 'closed' ? 'on' : ''} onClick={() => setShow('closed')}>done</button><button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>all</button></div>
       <span className="right" />
-      <span className="pill pending">{counts.pending} {tr(lang, 'Pending')}</span><span className="pill done">{counts.witness} need witness</span><span className="pill blocked">{counts.blocked} {tr(lang, 'Blocked')}</span><span className="pill gray">{counts.done} {tr(lang, 'Done')}</span>
+      <span className="pill pending">{counts.pending} {tr(lang, 'Pending')}</span><span className="pill done">{counts.witness} need witness</span><span className="pill blocked">{counts.blocked} {tr(lang, 'Blocked')}</span>
+      {counts.unassigned > 0 ? <button className="pill failed" style={{ border: 0, cursor: 'pointer' }} onClick={() => setPick({ tasks: openTasks.filter(t => !t.assignee), title: lang === 'th' ? `มอบหมายงานที่ยังไม่มีผู้รับผิดชอบ ${counts.unassigned} งาน` : `Assign all ${counts.unassigned} unassigned tasks` })}>⚠ {counts.unassigned} {lang === 'th' ? 'ยังไม่มอบหมาย' : 'unassigned'}</button> : openTasks.length > 0 && <span className="pill done">✓ {lang === 'th' ? 'มอบหมายครบ' : 'all assigned'}</span>}
+      <span className="pill gray">{counts.done} {tr(lang, 'Done')}</span>
       {incidents.length > 0 && <button className="pill failed" style={{ border: 0, cursor: 'pointer' }} onClick={() => setShowInc(!showInc)}>⚠ {incidents.length} {tr(lang, 'Incidents')} {showInc ? '▴' : '▾'}</button>}
     </div>
     {showInc && incidents.length > 0 && <div className="card" style={{ borderColor: 'var(--ruby)', marginBottom: 12 }}>{incidents.map(i => <div key={i.id} className="flex" style={{ marginBottom: 6 }}><Pill s="failed">{i.severity}</Pill><span style={{ flex: 1 }}>{i.description}</span><span className="muted">{fmtDT(i.created_at, lang)}</span><button className="btn ghost xs" onClick={() => resolve(i)}>Resolve</button></div>)}</div>}
     {view === 'board' && <div className="board">
-      {groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="col">
-        <div className="colhead"><b>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')}</b><span className="count">{vis.length}</span><button className="btn ghost xs right" onClick={() => print(vis.map(t => t.id))} title="print labels for this column">🖨</button></div>
-        {vis.map(t => <Card key={t.id} t={t} />)}</div>; })}
+      {groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; const open = vis.filter(t => t.status === 'pending'); return <div key={g} className="col">
+        <div className="colhead"><div><div className="title">{groupTitle(g, lang)}</div><div className="sub">{groupSub(g, lang)}{open.length ? ` · ${open.filter(t => t.assignee).length}/${open.length} ${lang === 'th' ? 'มอบหมายแล้ว' : 'assigned'}` : ''}</div></div><span className="count">{vis.length}</span></div>
+        <div className="coltools">
+          {open.length > 0 && <button className="btn ghost xs" onClick={() => setPick({ tasks: open, title: `${groupTitle(g, lang)} — ${lang === 'th' ? 'มอบหมายทั้งคอลัมน์' : 'assign whole column'} (${open.length})` })}>👤 {lang === 'th' ? 'มอบหมายทั้งหมด' : 'Assign all'}</button>}
+          <button className="btn ghost xs" onClick={() => print(vis.map(t => t.id))} title="print labels for this column">🖨 {lang === 'th' ? 'ฉลาก' : 'Labels'}</button>
+        </div>
+        <div className="colbody">{vis.map(t => <Card key={t.id} t={t} />)}</div></div>; })}
     </div>}
-    {view === 'list' && groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="card"><h2>{lang === 'th' ? (GROUP_TH[g] || g) : g.replace(/_/g, ' ')} <Pill s="gray">{vis.length}</Pill>
+    {view === 'list' && groups.map(([g, tasks]) => { const vis = tasks.filter(visible); if (!vis.length) return null; return <div key={g} className="card"><h2 style={{ fontSize: 24 }}>{groupTitle(g, lang)} <span className="muted" style={{ fontSize: 15 }}>{groupSub(g, lang)}</span> <Pill s="gray">{vis.length}</Pill>
       <button className="btn ghost xs right" onClick={() => print(vis.map(t => t.id))}>🖨 labels</button></h2>
-      <table className="t"><thead><tr><th style={{ width: 30 }}></th><th>{tr(lang, 'Time')}</th><th>{tr(lang, 'Patient')}</th><th>Day</th><th>Cycle · order</th><th>Items</th><th>{tr(lang, 'Status')}</th><th></th></tr></thead>
+      <table className="t"><thead><tr><th style={{ width: 30 }}></th><th>{tr(lang, 'Time')}</th><th>{tr(lang, 'Patient')}</th><th>Day</th><th>Cycle · order</th><th>{lang === 'th' ? 'ผู้รับผิดชอบ' : 'Assigned to'}</th><th>Items</th><th>{tr(lang, 'Status')}</th><th></th></tr></thead>
         <tbody>{vis.map(t => <tr key={t.id}><td><input type="checkbox" checked={sel.includes(t.id)} onChange={() => toggle(t.id)} /></td>
           <td>{t.scheduled_time ? t.scheduled_time.slice(0, 5) : ''}{days > 1 && <div className="muted">{fmtDate(t.scheduled_date, lang)}</div>}</td>
           <td><b>{t.hn}</b> {nameOf(t, lang)}{t.partner_en && <div className="muted">partner {t.partner_en}</div>}</td><td>D{t.lab_day}</td>
           <td><a href={'/cycles/' + t.cycle_id}>{t.cycle_number}</a><div className="muted">{t.physician_order || t.cycle_type}</div></td>
+          <td>{t.assignee ? <><b>{staffName(t.assignee, lang)}</b><div className="muted">{roleName(t.assignee.role, lang)}</div></> : <span style={{ color: 'var(--ruby)', fontWeight: 700 }}>{lang === 'th' ? 'ยังไม่มอบหมาย' : 'Unassigned'}</span>}
+            {t.status === 'pending' && <div><button className="btn ghost xs" onClick={() => setPick({ tasks: [t], title: `${groupTitle(t.task_type, lang)} · ${t.hn}` })}>{t.assignee ? (lang === 'th' ? 'เปลี่ยน' : 'Change') : (lang === 'th' ? 'มอบหมาย' : 'Assign')}</button></div>}</td>
           <td className="muted">{(t.items_required || []).join(', ')}</td>
           <td><Pill s={t.effective_status}>{tr(lang, t.effective_status.charAt(0).toUpperCase() + t.effective_status.slice(1))}</Pill>{t.blocked_by_consent.length > 0 && <div className="muted">{t.blocked_by_consent.join(', ')}</div>}{t.failed_reason && <div className="muted">{t.failed_reason}</div>}</td>
           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{t.status === 'pending' && <>{t.requires_witness ? <a className="btn emerald xs" href={`/lab/witness?task=${t.id}`}>▣ {tr(lang, 'Witness')}</a> : <button className="btn emerald xs" onClick={() => done(t)}>✓ {tr(lang, 'Done')}</button>} <button className="btn ghost xs" onClick={() => fail(t)}>✕</button></>}
             {t.status === 'done' && <span className="muted">{fmtDT(t.done_at, lang)}</span>}</td></tr>)}</tbody></table></div>; })}
     {data.tasks.length === 0 && <div className="card muted center" style={{ padding: 40 }}>No lab tasks for this day. Tasks appear when a procedure is scheduled on a cycle.</div>}
+    {pick && <Modal title={(lang === 'th' ? 'มอบหมาย: ' : 'Assign: ') + pick.title} onClose={() => setPick(null)}>
+      <div className="muted" style={{ marginBottom: 10 }}>{pick.tasks.length} {lang === 'th' ? 'งาน' : pick.tasks.length === 1 ? 'task' : 'tasks'} · {lang === 'th' ? 'เลือกเจ้าหน้าที่ที่รับผิดชอบขั้นตอนนี้' : 'choose the staff member responsible for this step'}</div>
+      <div className="staff">
+        {myId && staff.some(s => s.id === myId) && <button className="on" onClick={() => assign(myId)}><span className="av">★</span>{lang === 'th' ? 'มอบหมายให้ฉัน' : 'Assign to me'}<span className="rl">{staffName(staff.find(s => s.id === myId), lang)}</span></button>}
+        {staff.map(s => <button key={s.id} className={pick.tasks.length === 1 && pick.tasks[0].assignee && pick.tasks[0].assignee.id === s.id ? 'on' : ''} onClick={() => assign(s.id)}><span className="av">{s.initials}</span>{staffName(s, lang)}<span className="rl">{roleName(s.role, lang)}</span></button>)}
+        {pick.tasks.some(t => t.assignee) && <button onClick={() => assign(null)} style={{ color: 'var(--ruby)' }}><span className="av" style={{ background: 'var(--ruby)' }}>✕</span>{lang === 'th' ? 'ยกเลิกการมอบหมาย' : 'Unassign'}</button>}
+      </div></Modal>}
     <Toast msg={toastMsg} />
   </Shell>;
 }

@@ -291,6 +291,9 @@ class LabTask(Base):
     failed_reason      = Column(Text)
     witness_session_id = Column(UUID)                                # last successful witness session
     notes              = Column(Text)
+    assigned_to        = Column(UUID, ForeignKey("users.id"), index=True)   # j1_002: who is responsible for this step
+    assigned_at        = Column(DateTime(timezone=True))
+    assigned_by        = Column(UUID, ForeignKey("users.id"))
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_lab_tasks_date_status", "scheduled_date", "status"),)

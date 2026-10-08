@@ -118,6 +118,9 @@ function Schedule({ ws, lang, reload, toast }) {
   const schedule = async () => { try { const r = await api(`${J}/cycles/${CID}/schedule`, { body: sch }); toast(`Scheduled · ${r.tasks_generated} lab tasks generated`); reload(); } catch (e) { toast(e.message, true); } };
   const done = async (t) => { try { await api(`${J}/lab/tasks/${t.id}/done`, { body: {} }); reload(); } catch (e) { toast(e.message, true); } };
   const fail = async (t) => { const reason = prompt('Reason'); if (!reason) return; await api(`${J}/lab/tasks/${t.id}/failed`, { body: { reason } }); reload(); };
+  const [staff, setStaff] = useState([]); useEffect(() => { api(`${J}/lab/staff`).then(setStaff).catch(() => {}); }, []);
+  const assign = async (t, userId) => { try { await api(`${J}/lab/tasks/${t.id}/assign`, { body: { user_id: userId || null } }); reload(); } catch (e) { toast(e.message, true); } };
+  const staffName = (a) => a ? (lang === 'th' ? (a.name_th || a.name_en) : a.name_en) : '';
   const print = async (day) => { try { const b = await api(`${J}/labels/print`, { body: { task_ids: ws.tasks.filter(t => day == null || t.lab_day === day).map(t => t.id) } }); openBlob(b); } catch (e) { toast(e.message, true); } };
   const byDay = ws.tasks.reduce((a, t) => { (a[t.lab_day] = a[t.lab_day] || []).push(t); return a; }, {});
   return <div>
@@ -137,6 +140,9 @@ function Schedule({ ws, lang, reload, toast }) {
     <div className="card"><h2>Lab tasks <button className="btn ghost xs right" onClick={() => print(null)}>🖨 {tr(lang, 'Print labels')} (all)</button></h2>
       {Object.keys(byDay).sort((a, b) => a - b).map(d => <div key={d} style={{ marginBottom: 14 }}><div className="flex"><span className="tag">D{d}</span><span className="muted">{byDay[d][0] && fmtDate(byDay[d][0].scheduled_date, lang)}</span><button className="btn ghost xs" onClick={() => print(+d)}>🖨 D{d} labels</button></div>
         <table className="t" style={{ marginTop: 6 }}><tbody>{byDay[d].map(t => <tr key={t.id}><td style={{ width: 70 }}>{t.scheduled_time ? t.scheduled_time.slice(0, 5) : ''}</td><td><b>{lang === 'th' ? (t.title_th || t.title_en) : t.title_en}</b>{t.notes === 'optional' && <span className="muted"> (optional)</span>}<div className="muted">{t.patient_id !== ws.patient.id ? 'partner · ' : ''}{(t.items_required || []).join(', ')}{t.requires_witness ? ' · witness' : ''}</div></td>
+          <td style={{ minWidth: 170 }}>{t.status === 'pending' ? <select className="input" style={{ width: '100%', fontWeight: 700, color: t.assignee ? 'var(--ink)' : 'var(--ruby)' }} value={t.assignee ? t.assignee.id : ''} onChange={e => assign(t, e.target.value)}>
+              <option value="">{lang === 'th' ? '— ยังไม่มอบหมาย —' : '— unassigned —'}</option>{staff.map(u => <option key={u.id} value={u.id}>{staffName(u)} · {u.role.replace(/_/g, ' ')}</option>)}</select>
+            : <span className="muted">{t.assignee ? staffName(t.assignee) : ''}</span>}</td>
           <td><Pill s={t.effective_status}>{t.effective_status}</Pill>{t.blocked_by_consent.length > 0 && <div className="muted">needs: {t.blocked_by_consent.join(', ')}</div>}</td>
           <td style={{ textAlign: 'right' }}>{t.status === 'pending' && <>{t.requires_witness ? <a className="btn emerald xs" href={`/lab/witness?task=${t.id}`}>{tr(lang, 'Witness')}</a> : <button className="btn emerald xs" onClick={() => done(t)}>{tr(lang, 'Done')}</button>} <button className="btn ghost xs" onClick={() => fail(t)}>{tr(lang, 'Failed')}</button></>}
             {t.status === 'done' && <span className="muted">{fmtDT(t.done_at, lang)}</span>}</td></tr>)}</tbody></table></div>)}

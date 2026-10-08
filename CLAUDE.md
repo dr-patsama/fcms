@@ -155,11 +155,13 @@ Label printing: Pharmacy labels are **80×50mm**; lab tube labels are **40×20mm
 
 ## Journey layer (Binflux-Infans-style flow)
 Pages: `/cycles`, `/cycles/{id}`, `/lab/todo`, `/lab/witness`, `/desk`, `/admin/packages`, `/insight`, `/portal` (patient PWA).
-APIs: `/api/v1/journey/*` (staff), `/api/v1/portal/*` (patients). Migration `j1_001` chains after `m10_001`.
+APIs: `/api/v1/journey/*` (staff), `/api/v1/portal/*` (patients). Migrations `j1_001` → `j1_002` chain after `m10_001`.
 Rules: a package drives all lanes · every handoff is a `cycle_events` row with isolated handlers · lab tasks are blocked until
 required consents are signed · witness = all scanned items resolve to the same cycle (partner allowed for sperm items) ·
 external channels are optional and report "skipped" when not configured. `.env` keys in `journey/README.md`.
-Test: `PYTHONPATH=. python scripts/e2e_journey.py` (70 checks). Daily job: `POST /api/v1/journey/jobs/daily`.
+Test: `PYTHONPATH=. python scripts/e2e_journey.py` (77 checks). Daily job: `POST /api/v1/journey/jobs/daily`.
+KPIs: `journey/backend/services/kpi.py` — `BENCHMARKS` carries competence/benchmark/direction/source per indicator (Vienna 2017 lab, Maribor 2021 clinical; "local" = clinic sets it). `scripts/seed_kpi_demo.py` = demo history only, never production.
+Lab tasks have an assignee (`assigned_to`); the board at `/lab/todo` shows it on every card.
 Journey-layer models use `UUID(as_uuid=False)` (string ids). Module 1/2 ids come back as `uuid.UUID` — compare with `str()`.
 
 ## Live boards
