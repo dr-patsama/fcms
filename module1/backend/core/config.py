@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
-    # MFA
-    MFA_REQUIRED_ROLES: List[str] = ["physician", "embryologist", "lab_supervisor", "admin"]
+    # MFA — comma-separated in .env (declared as str so pydantic-settings does not try to JSON-decode it); split to a list in __init__
+    MFA_REQUIRED_ROLES: str = "physician,embryologist,lab_supervisor,admin"
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+    # CORS — comma-separated in .env, e.g. CORS_ORIGINS=http://localhost:8000,http://192.168.1.10:8000
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -38,7 +38,14 @@ class Settings(BaseSettings):
 
     @classmethod
     def _split(cls, v):
-        return [x.strip() for x in v.split(",")] if isinstance(v, str) else v
+        """Accept 'a,b' or a JSON list '["a","b"]' from .env; return a clean list."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                import json
+                return [str(x).strip() for x in json.loads(v)]
+            return [x.strip() for x in v.split(",") if x.strip()]
+        return list(v)
 
     class Config:
         env_file = ".env"
